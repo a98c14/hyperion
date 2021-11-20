@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func shiftPath(p string) (head, tail string) {
+func ShiftPath(p string) (head, tail string) {
 	p = path.Clean("/" + p)
 	i := strings.Index(p[1:], "/") + 1
 	if i <= 0 {

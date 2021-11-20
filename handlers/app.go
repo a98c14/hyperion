@@ -1,14 +1,18 @@
 package handlers
 
-import "net/http"
+import (
+	"net/http"
+
+	v1 "github.com/a98c14/hyperion/handlers/v1"
+)
 
 type App struct {
-	UserHandler *UserHandler
+	UserHandler *v1.UserHandler
 }
 
 func (h *App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var head string
-	head, req.URL.Path = shiftPath(req.URL.Path)
+	head, req.URL.Path = ShiftPath(req.URL.Path)
 	switch head {
 	case "user":
 		h.UserHandler.ServeHTTP(w, req)
@@ -21,7 +25,7 @@ func (h *App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func New() *App {
 	app := &App{
-		UserHandler: &UserHandler{},
+		UserHandler: &v1.UserHandler{},
 	}
 
 	return app
