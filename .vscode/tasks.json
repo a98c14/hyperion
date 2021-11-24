@@ -8,15 +8,22 @@
             "type": "shell",
             "command": "go build main.go",
             "problemMatcher": [],
+            "group": "build"
+        },
+        {
+            "label": "build and run",
+            "type": "shell",
+            "command": "go build main.go; ./main.exe",
+            "problemMatcher": [],
             "group": {
                 "kind": "build",
                 "isDefault": true
             }
         },
         {
-            "label": "run",
+            "label": "debug",
             "type": "shell",
-            "command": "go run main.go",
+            "command": "dlv-dap dap --check-go-version=false --listen=127.0.0.1:1238 from d:\\Work\\RogueChampions\\backend",
             "problemMatcher": [],
             "group": {
                 "kind": "build",

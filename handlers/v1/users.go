@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/a98c14/hyperion/db"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -28,7 +29,7 @@ const CONNECTION_STRING string = "postgres://postgres:123@127.0.0.1:5432/hyperio
 
 func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-	conn, err := pgx.Connect(context.Background(), CONNECTION_STRING)
+	conn, err := pgx.Connect(context.Background(), db.ConnectionString)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)

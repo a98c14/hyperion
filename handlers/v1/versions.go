@@ -5,42 +5,78 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
+	"strconv"
 
 	"github.com/a98c14/hyperion/db"
+	"github.com/a98c14/hyperion/utils"
 	"github.com/jackc/pgx/v4"
 )
 
 type VersionsHandler struct{}
 
-type VersionsResponse struct {
-	X int `json:"Value"`
+type VersionResponse struct {
+	Id      int
+	Name    string
+	Content string
 }
 
 type VersionsRequest struct {
 	Id int
 }
 
-func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-	conn, err := pgx.Connect(context.Background(), db.ConnectionString)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-		os.Exit(1)
-	}
-	defer conn.Close(context.Background())
-	var u UserRequest
-	err = json.NewDecoder(r.Body).Decode(&u)
-	if err != nil {
-		fmt.Println("Invalid request!", r.Body)
+func (h *VersionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var head string
+	head, r.URL.Path = utils.ShiftPath(r.URL.Path)
+	// Get All
+	if head == "" {
+		switch r.Method {
+		case utils.GET:
+			handleGetAll(w)
+		case utils.POST:
+			handlePost(w, r)
+		default:
+			http.Error(w, "Only GET and POST are allowed", http.StatusMethodNotAllowed)
+		}
 		return
 	}
-	var name string
-	err = conn.QueryRow(context.Background(), "select name from users where id=$1", u.Id).Scan(&name)
+
+	// Get by Id
+	id, err := strconv.Atoi(head)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
-		os.Exit(1)
+		http.Error(w, fmt.Sprintf("Invalid user id %q", head), http.StatusBadRequest)
+		return
 	}
 
-	fmt.Println(name)
+	switch r.Method {
+	case utils.GET:
+		handleGet(id, w)
+	case utils.POST:
+		handlePost(w, r)
+	default:
+		http.Error(w, "Only GET and POST are allowed", http.StatusMethodNotAllowed)
+		return
+	}
+}
+
+func handleGetAll(w http.ResponseWriter) {
+	conn, err := pgx.Connect(context.Background(), db.ConnectionString)
+	if err != nil {
+		http.Error(w, "Could not connect to database", http.StatusInternalServerError)
+		return
+	}
+	defer conn.Close(context.Background())
+	var v []VersionResponse
+	err = conn.QueryRow(context.Background(), "select (id, name, content) from versions").Scan(&v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(v)
+}
+
+func handleGet(id int, w http.ResponseWriter) {
+}
+
+func handlePost(w http.ResponseWriter, r *http.Request) {
+
 }
