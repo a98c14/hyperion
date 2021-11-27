@@ -8,8 +8,10 @@ import (
 )
 
 type App struct {
-	UserHandler    *v1.UserHandler
-	VersionHandler *v1.VersionsHandler
+	UserHandler      *v1.UserHandler
+	VersionHandler   *v1.VersionsHandler
+	ComponentHandler *v1.ComponentsHandler
+	PrefabHandler    *v1.PrefabsHandler
 }
 
 func (h *App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -22,6 +24,12 @@ func (h *App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	case "versions":
 		h.VersionHandler.ServeHTTP(w, req)
 		return
+	case "components":
+		h.ComponentHandler.ServeHTTP(w, req)
+		return
+	case "prefabs":
+		h.PrefabHandler.ServeHTTP(w, req)
+		return
 	case "ws":
 		// conn, err := upgrader.Upgrade(w, req, nil)
 	}
@@ -31,8 +39,10 @@ func (h *App) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func New() *App {
 	app := &App{
-		UserHandler:    &v1.UserHandler{},
-		VersionHandler: &v1.VersionsHandler{},
+		UserHandler:      &v1.UserHandler{},
+		VersionHandler:   &v1.VersionsHandler{},
+		ComponentHandler: &v1.ComponentsHandler{},
+		PrefabHandler:    &v1.PrefabsHandler{},
 	}
 
 	return app

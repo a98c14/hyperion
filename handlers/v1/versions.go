@@ -65,6 +65,7 @@ func handleGetAll(w http.ResponseWriter) {
 		return
 	}
 	defer conn.Close(context.Background())
+	
 	var v []VersionResponse
 	err = conn.QueryRow(context.Background(), "select (id, name, content) from versions").Scan(&v)
 	if err != nil {

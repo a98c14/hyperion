@@ -1,0 +1,37 @@
+POST http://localhost:8000/components HTTP/1.1
+content-type: application/json
+
+{
+    "name": "BaseStats",
+    "structure": {
+        "id": 1,
+        "Test": 2,
+        "TestJson": {
+            "Val": 3,
+            "Val2": 4
+        },
+        "Test": 2,
+        "SecondTestJson": {
+            "SecondVal": 3,
+            "SecondVal2": 4
+        },
+        "ComplexTestJson": {
+            "ComplexVal": {
+                "ComplexChildVal": 5,
+                "ComplexChildVal2": 12
+            }
+        },
+        "LastValue": 5,
+        "ComplexSecondTestJson": {
+            "SimpleVal": 5,
+            "ComplexVal": {
+                "ComplexChildVal": 5,
+                "ComplexChildVal2": 12,
+                "DeeplyNestedVal":{
+                    "DeepChild": 20
+                }
+            }
+        }
+    }
+}
+

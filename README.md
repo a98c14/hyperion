@@ -7,7 +7,9 @@
 
 # Done
 ## 2021-11-24
-- 
+- Create database design docs
+- Design database for dynamic prefab system
+- Create tables 
 
 ## 2021-11-23
 - Find a way to dynamically load entities to UnityEngine

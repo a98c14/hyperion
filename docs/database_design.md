@@ -9,21 +9,18 @@ A GameEntity is composed of components. Each component has an id, name and possi
     "Parent": null,
     // "Children": [12, 42],
 }
-
 {
     "Id": 12,
     "Name": "OffensiveStats",
     "Parent": 126,
     // "Children": [2, 4, 6, 7],
 }
-
 {
     "Id": 2,
     "Name": "Power",
     "Parent": 12,
     // "Children": null,
 }
-
 {
     "Id": 3,
     "Name": "Haste",
