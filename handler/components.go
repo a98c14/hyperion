@@ -12,6 +12,9 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+/* Gets the base component and all of its component parts by name.
+Can only query base components. Nodes that have null as children
+represent leaf/value nodes */
 func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	conn, err := pgxpool.Connect(ctx, db.ConnectionString)
@@ -81,7 +84,7 @@ func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 			cr := componentResponse{
 				Id:       c.Id,
 				Name:     c.Name,
-				Children: make([]*componentResponse, 0),
+				Children: nil,
 			}
 			val.Children = append(val.Children, &cr)
 			nodeMap[c.Id] = &cr
