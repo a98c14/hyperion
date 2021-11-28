@@ -36,7 +36,7 @@ func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 	type component struct {
 		Id       int
 		Name     string
-		ParentId sql.NullInt32
+		ParentId int
 	}
 	components := make([]component, 0, 10)
 	defer rows.Close()
@@ -50,14 +50,49 @@ func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error while fetching from database!"+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		components = append(components, component{Id: id, Name: name, ParentId: parentId})
+		pid := 0
+		if parentId.Valid {
+			pid = int(parentId.Int32)
+		}
+		components = append(components, component{Id: id, Name: name, ParentId: pid})
 	}
-	if rows.CommandTag().RowsAffected() == 0 {
+	componentCount := rows.CommandTag().RowsAffected()
+	if componentCount == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+
+	type componentResponse struct {
+		Id       int
+		Name     string
+		Children []*componentResponse
+	}
+
+	root := componentResponse{
+		Id:       components[0].Id,
+		Name:     components[0].Name,
+		Children: make([]*componentResponse, 0),
+	}
+	nodeMap := make(map[int]*componentResponse, componentCount)
+	nodeMap[root.Id] = &root
+
+	for _, c := range components[1:] {
+		if val, ok := nodeMap[c.ParentId]; ok {
+			cr := componentResponse{
+				Id:       c.Id,
+				Name:     c.Name,
+				Children: make([]*componentResponse, 0),
+			}
+			val.Children = append(val.Children, &cr)
+			nodeMap[c.Id] = &cr
+		} else {
+			http.Error(w, "Could not create object tree from components! Error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(&components)
+	json.NewEncoder(w).Encode(&root)
 }
 
 func GetComponentById(w http.ResponseWriter, r *http.Request) {
