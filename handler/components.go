@@ -8,8 +8,57 @@ import (
 	"net/http"
 
 	"github.com/a98c14/hyperion/db"
-	"github.com/jackc/pgx/v4"
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
+
+func GetComponentByName(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	conn, err := pgxpool.Connect(ctx, db.ConnectionString)
+	if err != nil {
+		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
+		return
+	}
+
+	// Load components that have given name from database
+	componentName := chi.URLParam(r, "componentName")
+	rows, err := conn.Query(ctx, `with recursive component_parts as (
+			select id, name, parent_id from component
+			where name=$1 and parent_id is null
+			union select c.id, c.name, c.parent_id from component c inner join component_parts cp on cp.id=c.parent_id 
+		) select * from component_parts;`, componentName)
+
+	if err != nil {
+		http.Error(w, "Could not fetch data from database!", http.StatusInternalServerError)
+		return
+	}
+
+	type component struct {
+		Id       int
+		Name     string
+		ParentId sql.NullInt32
+	}
+	components := make([]component, 0, 10)
+	defer rows.Close()
+
+	var id int
+	var name string
+	var parentId sql.NullInt32
+	for rows.Next() {
+		err = rows.Scan(&id, &name, &parentId)
+		if err != nil {
+			http.Error(w, "Error while fetching from database!"+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		components = append(components, component{Id: id, Name: name, ParentId: parentId})
+	}
+	if rows.CommandTag().RowsAffected() == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(&components)
+}
 
 func GetComponentById(w http.ResponseWriter, r *http.Request) {
 
@@ -24,7 +73,7 @@ func ListComponents(w http.ResponseWriter, r *http.Request) {
 // other components and editor can only filter using root components
 func GetRootComponents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	conn, err := pgx.Connect(ctx, db.ConnectionString)
+	conn, err := pgxpool.Connect(ctx, db.ConnectionString)
 	if err != nil {
 		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
 		return
@@ -65,11 +114,6 @@ func UpdateComponent(w http.ResponseWriter, r *http.Request) {
 
 }
 
-type createComponentRequest struct {
-	Name      string
-	Structure json.RawMessage
-}
-
 type node struct {
 	id        int
 	parent_id sql.NullInt32
@@ -79,20 +123,24 @@ type node struct {
 
 // Creates a new component structure
 func CreateComponent(w http.ResponseWriter, r *http.Request) {
-	// Start database connection.
-	// TODO(selim): Use connection pool
-	ctx := r.Context()
-	conn, err := pgx.Connect(ctx, db.ConnectionString)
-	if err != nil {
-		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
-		return
+	type createComponentRequest struct {
+		Name      string
+		Structure json.RawMessage
 	}
 
 	// Parse request body
 	var req createComponentRequest
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "Could not parse request body!", http.StatusBadRequest)
+		return
+	}
+
+	// Start database connection.
+	ctx := r.Context()
+	conn, err := pgxpool.Connect(ctx, db.ConnectionString)
+	if err != nil {
+		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
 		return
 	}
 
@@ -171,7 +219,7 @@ func CreateComponent(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Successfully created component!")
 }
 
-func insertComponent(conn *pgx.Conn, ctx context.Context, node node) (sql.NullInt32, error) {
+func insertComponent(conn *pgxpool.Pool, ctx context.Context, node node) (sql.NullInt32, error) {
 	var id sql.NullInt32
 	err := conn.QueryRow(ctx,
 		`insert into "component" 

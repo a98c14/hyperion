@@ -22,6 +22,7 @@ func New() *chi.Mux {
 		r.Delete("/", handler.DeleteComponent)
 
 		r.Get("/{componentId}", handler.GetComponentById)
+		r.Get("/{componentName}", handler.GetComponentByName)
 
 		r.Get("/roots", handler.GetRootComponents)
 	})
