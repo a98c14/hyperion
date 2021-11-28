@@ -35,3 +35,6 @@ content-type: application/json
     }
 }
 
+####
+
+GET http://localhost:8000/components/roots HTTP/1.1

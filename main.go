@@ -7,7 +7,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/a98c14/hyperion/handlers"
+	"github.com/a98c14/hyperion/router"
 	"github.com/gorilla/websocket"
 )
 
@@ -63,8 +63,7 @@ func listenGameSocket() {
 
 func startWebServer() {
 	fmt.Println("Starting web server...")
-	app := handlers.New()
-	http.ListenAndServe("127.0.0.1:8000", app)
+	http.ListenAndServe("127.0.0.1:8000", router.New())
 }
 
 func main() {
