@@ -41,6 +41,6 @@ func ListVersions(w http.ResponseWriter, r *http.Request) {
 func GetVersionById(w http.ResponseWriter, r *http.Request) {
 }
 
-func HandlePost(w http.ResponseWriter, r *http.Request) {
+func CreateVersion(w http.ResponseWriter, r *http.Request) {
 
 }

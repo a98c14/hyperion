@@ -63,7 +63,7 @@ func listenGameSocket() {
 
 func startWebServer() {
 	fmt.Println("Starting web server...")
-	http.ListenAndServe("127.0.0.1:8000", router.New())
+	http.ListenAndServe(":8000", router.New())
 }
 
 func main() {

@@ -1,6 +1,6 @@
 package model
 
-type Component struct {
+type PrefabPart struct {
 	Id     int
 	Name   string
 	Parent int

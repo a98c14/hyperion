@@ -6,16 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/a98c14/hyperion/db"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-/* Gets the base component and all of its component parts by name.
+/* Gets the base prefab_part and all of its children by id.
 Can only query base components. Nodes that have null as children
-represent leaf/value nodes */
-func GetComponentByName(w http.ResponseWriter, r *http.Request) {
+represent leaf nodes */
+func GetModuleById(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	conn, err := pgxpool.Connect(ctx, db.ConnectionString)
 	if err != nil {
@@ -24,31 +25,39 @@ func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load components that have given name from database
-	componentName := chi.URLParam(r, "componentName")
-	rows, err := conn.Query(ctx, `with recursive component_parts as (
-			select id, name, parent_id from component
-			where name=$1 and parent_id is null
-			union select c.id, c.name, c.parent_id from component c inner join component_parts cp on cp.id=c.parent_id 
-		) select * from component_parts;`, componentName)
+	componentIdString := chi.URLParam(r, "componentId")
+	componentId, err := strconv.Atoi(componentIdString)
+	if err != nil {
+		http.Error(w, "Could not parse id value!", http.StatusBadRequest)
+		return
+	}
+
+	rows, err := conn.Query(ctx, `with recursive prefab_part_recursive as (
+			select id, name, type, parent_id from prefab_part
+			where id=$1 and parent_id is null
+			union select c.id, c.name, c.type, c.parent_id from prefab_part c inner join prefab_part_recursive cp on cp.id=c.parent_id 
+		) select * from prefab_part_recursive;`, componentId)
 
 	if err != nil {
 		http.Error(w, "Could not fetch data from database!", http.StatusInternalServerError)
 		return
 	}
 
-	type component struct {
-		Id       int
-		Name     string
-		ParentId int
+	type modulePart struct {
+		Id        int
+		Name      string
+		ValueType int
+		ParentId  int
 	}
-	components := make([]component, 0, 10)
+	moduleParts := make([]modulePart, 0, 10)
 	defer rows.Close()
 
 	var id int
 	var name string
+	var valueType int
 	var parentId sql.NullInt32
 	for rows.Next() {
-		err = rows.Scan(&id, &name, &parentId)
+		err = rows.Scan(&id, &name, &valueType, &parentId)
 		if err != nil {
 			http.Error(w, "Error while fetching from database!"+err.Error(), http.StatusInternalServerError)
 			return
@@ -57,7 +66,7 @@ func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 		if parentId.Valid {
 			pid = int(parentId.Int32)
 		}
-		components = append(components, component{Id: id, Name: name, ParentId: pid})
+		moduleParts = append(moduleParts, modulePart{Id: id, Name: name, ValueType: valueType, ParentId: pid})
 	}
 	componentCount := rows.CommandTag().RowsAffected()
 	if componentCount == 0 {
@@ -66,25 +75,28 @@ func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type componentResponse struct {
-		Id       int
-		Name     string
-		Children []*componentResponse
+		Id        int                  `json:"id"`
+		Name      string               `json:"name"`
+		ValueType int                  `json:"value_type"`
+		Children  []*componentResponse `json:"children"`
 	}
 
+	/* Create object tree from prefab part list. Components are always ordered from root to child*/
 	root := componentResponse{
-		Id:       components[0].Id,
-		Name:     components[0].Name,
-		Children: make([]*componentResponse, 0),
+		Id:        moduleParts[0].Id,
+		Name:      moduleParts[0].Name,
+		ValueType: moduleParts[0].ValueType,
+		Children:  make([]*componentResponse, 0),
 	}
 	nodeMap := make(map[int]*componentResponse, componentCount)
 	nodeMap[root.Id] = &root
-
-	for _, c := range components[1:] {
+	for _, c := range moduleParts[1:] {
 		if val, ok := nodeMap[c.ParentId]; ok {
 			cr := componentResponse{
-				Id:       c.Id,
-				Name:     c.Name,
-				Children: nil,
+				Id:        c.Id,
+				Name:      c.Name,
+				ValueType: c.ValueType,
+				Children:  nil,
 			}
 			val.Children = append(val.Children, &cr)
 			nodeMap[c.Id] = &cr
@@ -98,16 +110,12 @@ func GetComponentByName(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(&root)
 }
 
-func GetComponentById(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func ListComponents(w http.ResponseWriter, r *http.Request) {
 
 }
 
 // Returns all the root components.
-// Root components are component that have no parent. Used to group
+// Root components are prefab_part that have no parent. Used to group
 // other components and editor can only filter using root components
 func GetRootComponents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -117,17 +125,17 @@ func GetRootComponents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := conn.Query(ctx, `select id, name from "component" where parent_id is null`)
+	rows, err := conn.Query(ctx, `select id, name from "prefab_part" where parent_id is null`)
 	if err != nil {
 		http.Error(w, "Could not fetch data from database!", http.StatusInternalServerError)
 		return
 	}
 
-	type component struct {
-		Id   int
-		Name string
+	type prefabPart struct {
+		Id   int    `json:"id"`
+		Name string `json:"name"`
 	}
-	components := make([]component, 0, 100)
+	components := make([]prefabPart, 0, 100)
 	defer rows.Close()
 
 	var id int
@@ -138,7 +146,7 @@ func GetRootComponents(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error while fetching from database! "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		components = append(components, component{Id: id, Name: name})
+		components = append(components, prefabPart{Id: id, Name: name})
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -153,17 +161,23 @@ func UpdateComponent(w http.ResponseWriter, r *http.Request) {
 }
 
 type node struct {
-	id        int
-	parent_id sql.NullInt32
-	key       string
-	val       json.RawMessage
+	id         int
+	value_type int
+	parent_id  sql.NullInt32
+	key        string
+	value      json.RawMessage
 }
 
-// Creates a new component structure
+// Creates a new prefab part structure
 func CreateComponent(w http.ResponseWriter, r *http.Request) {
 	type createComponentRequest struct {
 		Name      string
 		Structure json.RawMessage
+	}
+
+	type partInfo struct {
+		ValueType int
+		Child     json.RawMessage
 	}
 
 	// Parse request body
@@ -183,9 +197,9 @@ func CreateComponent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var exists bool
-	err = conn.QueryRow(ctx, "select exists(select 1 from component where name=$1)", req.Name).Scan(&exists)
+	err = conn.QueryRow(ctx, "select exists(select 1 from prefab_part where name=$1)", req.Name).Scan(&exists)
 	if exists || err != nil {
-		http.Error(w, "Given component already exists!", http.StatusBadRequest)
+		http.Error(w, "Given prefab part already exists!", http.StatusBadRequest)
 		return
 	}
 
@@ -202,10 +216,11 @@ func CreateComponent(w http.ResponseWriter, r *http.Request) {
 	// TODO(selim): Is 500 correct for channel size?
 	c := make(chan node, 500)
 	c <- node{
-		id:        0,
-		parent_id: sql.NullInt32{},
-		key:       req.Name,
-		val:       req.Structure,
+		id:         0,
+		value_type: 0,
+		parent_id:  sql.NullInt32{},
+		key:        req.Name,
+		value:      req.Structure,
 	}
 	processedObjects := 0
 
@@ -214,14 +229,14 @@ func CreateComponent(w http.ResponseWriter, r *http.Request) {
 		// Insert current node to database and store its id
 		id, err := insertComponent(conn, ctx, n)
 		if err != nil {
-			http.Error(w, "Could not insert component with key: "+n.key, http.StatusBadRequest)
+			http.Error(w, "Could not insert prefab part with key: "+n.key+" Error:"+err.Error(), http.StatusBadRequest)
 			return
 		}
 		processedObjects++
 
 		// Check if current value is a json object
 		m := make(map[string]json.RawMessage, 20)
-		err = json.Unmarshal(n.val, &m)
+		err = json.Unmarshal(n.value, &m)
 		if err != nil {
 			// If there is no more elements to process, close the channel
 			if len(c) == 0 {
@@ -238,10 +253,17 @@ func CreateComponent(w http.ResponseWriter, r *http.Request) {
 
 		// Add all values to process channel
 		for k := range m {
+			var pi partInfo
+			err = json.Unmarshal(m[k], &pi)
+			if err != nil {
+				http.Error(w, "Invalid module part structure!", http.StatusBadRequest)
+				return
+			}
 			c <- node{
-				parent_id: id,
-				key:       k,
-				val:       m[k],
+				parent_id:  id,
+				key:        k,
+				value_type: pi.ValueType,
+				value:      pi.Child,
 			}
 		}
 	}
@@ -254,15 +276,15 @@ func CreateComponent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Successfully created component!")
+	fmt.Fprintf(w, "Successfully created prefab part!")
 }
 
 func insertComponent(conn *pgxpool.Pool, ctx context.Context, node node) (sql.NullInt32, error) {
 	var id sql.NullInt32
 	err := conn.QueryRow(ctx,
-		`insert into "component" 
-		 (name, type, parent_id, is_hidden) 
-		 values($1, $2, $3, $4) returning id`,
-		node.key, 0, node.parent_id, false).Scan(&id)
+		`insert into "prefab_part" 
+		 (name, type, parent_id) 
+		 values($1, $2, $3) returning id`,
+		node.key, node.value_type, node.parent_id).Scan(&id)
 	return id, err
 }

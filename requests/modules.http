@@ -1,4 +1,4 @@
-POST http://localhost:8000/components HTTP/1.1
+POST http://localhost:8000/modules HTTP/1.1
 content-type: application/json
 
 {
@@ -37,7 +37,7 @@ content-type: application/json
 
 ####
 
-GET http://localhost:8000/components/roots HTTP/1.1
+GET http://localhost:8000/modules HTTP/1.1
 
 ####
 
@@ -59,6 +59,6 @@ content-type: application/json
 
 ####
 
-GET http://localhost:8000/components/BaseStats HTTP/1.1
+GET http://localhost:8000/modules/172 HTTP/1.1
 
 
