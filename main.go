@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 
+	"github.com/a98c14/hyperion/db"
 	"github.com/a98c14/hyperion/router"
 	"github.com/gorilla/websocket"
 )
@@ -63,6 +65,7 @@ func listenGameSocket() {
 
 func startWebServer() {
 	fmt.Println("Starting web server...")
+	db.InitDatabase(context.Background())
 	http.ListenAndServe(":8000", router.New())
 }
 

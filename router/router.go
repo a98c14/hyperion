@@ -14,6 +14,7 @@ func HandleCors(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
 func New() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(HandleCors)
@@ -33,6 +34,23 @@ func New() *chi.Mux {
 	})
 
 	// Prefabs
+
+	// Textures
+	r.Route("/textures", func(r chi.Router) {
+		r.Post("/", handler.CreateTexture)
+		r.Get("/", handler.GetTextures)
+		r.Get("/{textureId}", handler.GetTextureFile)
+	})
+
+	// Sprites
+	r.Route("/sprites", func(r chi.Router) {
+		r.Post("/", handler.CreateSprites)
+	})
+
+	// Animations
+	r.Route("/animations", func(r chi.Router) {
+		r.Post("/generate", handler.GenerateAnimationsFromSprites)
+	})
 
 	return r
 }

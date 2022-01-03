@@ -17,15 +17,18 @@ To create a prefab named `EnemyBoar` with health value 100. Below rows should ex
         - Array Index: 0
         - Value: 100
 */
-create table module_value (
+create table prefab_module_part (
     id                 bigserial primary key,
 
     -- If referenced module value has array type this column 
     -- determines the index. For non array types has the value of 0
     array_index        integer not null, 
 
-    -- Value for the referenced field
-    value              numeric not null,
+    -- Value for the referenced field. Either numeric or string value is used
+    -- depending on the type.
+    value_type         integer not null,
+    numeric_value      numeric,
+    string_value       varchar,
 
     prefab_id          integer not null,
     module_part_id     integer not null,

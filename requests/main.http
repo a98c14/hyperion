@@ -7,4 +7,4 @@ content-type: application/json
 
 ####
 
-GET http://localhost:8000/versions HTTP/1.1
+POST http://localhost:8000/animations/generate HTTP/1.1

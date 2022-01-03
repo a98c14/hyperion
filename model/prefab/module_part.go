@@ -1,6 +1,6 @@
-package model
+package prefab
 
-type PrefabPart struct {
+type ModulePart struct {
 	Id     int
 	Name   string
 	Parent int
