@@ -3,7 +3,10 @@ package router
 import (
 	"net/http"
 
-	"github.com/a98c14/hyperion/handler"
+	prefab "github.com/a98c14/hyperion/api/prefab-editor/handler"
+	render "github.com/a98c14/hyperion/api/render/handler"
+	"github.com/a98c14/hyperion/api/versioning/handler"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -26,30 +29,35 @@ func New() *chi.Mux {
 
 	// Components
 	r.Route("/modules", func(r chi.Router) {
-		r.Put("/", handler.UpdateComponent)
-		r.Post("/", handler.CreateComponent)
-		r.Delete("/", handler.DeleteComponent)
-		r.Get("/{componentId}", handler.GetModuleById)
-		r.Get("/", handler.GetRootComponents)
+		r.Put("/", prefab.UpdateComponent)
+		r.Post("/", prefab.CreateComponent)
+		r.Delete("/", prefab.DeleteComponent)
+		r.Get("/{moduleId}", prefab.GetModuleById)
+		r.Get("/", prefab.GetRootComponents)
 	})
 
 	// Prefabs
+	r.Route("/prefabs", func(r chi.Router) {
+		r.Post("/", prefab.CreatePrefab)
+	})
 
 	// Textures
 	r.Route("/textures", func(r chi.Router) {
-		r.Post("/", handler.CreateTexture)
-		r.Get("/", handler.GetTextures)
-		r.Get("/{textureId}", handler.GetTextureFile)
+		r.Post("/", render.CreateTexture)
+		r.Get("/", render.GetTextures)
+		r.Get("/{textureId}", render.GetTextureFile)
 	})
 
 	// Sprites
 	r.Route("/sprites", func(r chi.Router) {
-		r.Post("/", handler.CreateSprites)
+		r.Post("/", render.CreateSprites)
+		r.Get("/", render.GetSprites)
 	})
 
 	// Animations
 	r.Route("/animations", func(r chi.Router) {
-		r.Post("/generate", handler.GenerateAnimationsFromSprites)
+		r.Get("/", render.GetAnimations)
+		r.Post("/generate", render.GenerateAnimationsFromSprites)
 	})
 
 	return r

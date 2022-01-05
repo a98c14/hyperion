@@ -1,15 +1,16 @@
 package handler
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
 
+	"github.com/a98c14/hyperion/api/render/data"
+	"github.com/a98c14/hyperion/common/response"
 	"github.com/a98c14/hyperion/db"
-	"github.com/a98c14/hyperion/db/query"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -28,8 +29,8 @@ func GetTextures(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type textureResponse struct {
-		Id   int
-		Name string
+		Id   int    `json:"id"`
+		Name string `json:"name"`
 	}
 
 	var id int
@@ -43,15 +44,10 @@ func GetTextures(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(&result)
+	response.Json(w, &result)
 }
 
 func GetTextureFile(w http.ResponseWriter, r *http.Request) {
-	type textureRequest struct {
-		Id int
-	}
-
 	ctx := r.Context()
 
 	textureIdString := chi.URLParam(r, "textureId")
@@ -85,7 +81,7 @@ func GetTextureFile(w http.ResponseWriter, r *http.Request) {
 
 func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	type textureResponse struct {
-		Id int
+		Id int `json:"id"`
 	}
 
 	r.ParseMultipartForm(100 << 20)
@@ -93,21 +89,22 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	unityGuid := r.FormValue("guid")
 
 	if unityName == "" {
-		http.Error(w, "Texture name should not be empty!", http.StatusBadRequest)
+		response.BadRequest(w, errors.New("Texture name should not be empty!"))
 		return
 	}
 
 	if unityGuid == "" {
-		http.Error(w, "Texture guid should not be empty!", http.StatusBadRequest)
+		response.BadRequest(w, errors.New("Texture guid should not be empty!"))
 		return
 	}
 
 	file, handler, err := r.FormFile("texture")
 	if err != nil {
-		http.Error(w, "Could not read form file named texture, Error: "+err.Error(), http.StatusBadRequest)
+		response.BadRequest(w, errors.New("Could not read form file named texture"))
 		return
 	}
 	defer file.Close()
+
 	fmt.Printf("Uploaded File: %+v\n", handler.Filename)
 	fmt.Printf("File Size: %+v\n", handler.Size)
 	fmt.Printf("MIME Header: %+v\n", handler.Header)
@@ -124,11 +121,10 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	var existing int
 	conn.QueryRow(ctx, "select id from texture where unity_name=$1 limit 1", unityName).Scan(&existing)
 	if existing != 0 {
-		w.WriteHeader(http.StatusOK)
 		resp := textureResponse{
 			Id: existing,
 		}
-		json.NewEncoder(w).Encode(&resp)
+		response.Json(w, &resp)
 		return
 	}
 
@@ -150,16 +146,16 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	tempFile.Write(fileBytes)
 	path := tempFile.Name()
 
-	id, err := query.InsertTexture(ctx, conn, path, unityGuid, unityName)
+	id, err := data.InsertTexture(ctx, conn, path, unityGuid, unityName)
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Could not insert texture to database, Error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	resp := textureResponse{
 		Id: int(id.Int32),
 	}
-	json.NewEncoder(w).Encode(&resp)
+
+	response.Json(w, &resp)
 }

@@ -1,4 +1,4 @@
-package types
+package parser
 
 /*
 	Editor input types
@@ -39,58 +39,58 @@ const (
 )
 
 type RangeTypeInt struct {
-	Value int32 `json:value`
+	Value int32 `json:"value"`
 }
 
 type RangeTypeFloat struct {
-	Value float32 `json:value`
+	Value float32 `json:"value"`
 }
 
 type ColorType struct {
-	R float32 `json:r`
-	G float32 `json:g`
-	B float32 `json:b`
-	A float32 `json:a`
+	R float32 `json:"r"`
+	G float32 `json:"g"`
+	B float32 `json:"b"`
+	A float32 `json:"a"`
 }
 
 type AnimationType struct {
-	Id int32 `json:id`
+	Id int32 `json:"id"`
 }
 
 type SpriteType struct {
-	Id int32 `json:id`
+	Id int32 `json:"id"`
 }
 
 type PercentageType struct {
-	Value float32 `json:value`
+	Value float32 `json:"value"`
 }
 
 type Vector2Type struct {
-	X float32 `json:x`
-	Y float32 `json:y`
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
 }
 
 type Vector3Type struct {
-	X float32 `json:x`
-	Y float32 `json:y`
-	Z float32 `json:z`
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
+	Z float32 `json:"z"`
 }
 
 type Vector4Type struct {
-	X float32 `json:x`
-	Y float32 `json:y`
-	Z float32 `json:z`
-	W float32 `json:w`
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
+	Z float32 `json:"z"`
+	W float32 `json:"w"`
 }
 
 type BoolType struct {
-	Value bool `json:value`
+	Value bool `json:"value"`
 }
 
 type NumberType struct {
-	Value int32 `json:value`
+	Value int32 `json:"value"`
 }
 
 type TextType struct {
-	Value string `json:value`
+	Value string `json:"value"`
 }

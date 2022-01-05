@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/a98c14/hyperion/api/prefab-editor/data"
+	"github.com/a98c14/hyperion/common"
+	j "github.com/a98c14/hyperion/common/json"
+	"github.com/a98c14/hyperion/common/response"
 	"github.com/a98c14/hyperion/db"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -17,60 +21,23 @@ import (
 Can only query base components. Nodes that have null as children
 represent leaf nodes */
 func GetModuleById(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	conn, err := pgxpool.Connect(ctx, db.ConnectionString)
+	state, err := common.InitState(r)
 	if err != nil {
-		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
+		response.ErrorWhileInitializing(w, err)
 		return
 	}
 
 	// Load components that have given name from database
-	componentIdString := chi.URLParam(r, "componentId")
-	componentId, err := strconv.Atoi(componentIdString)
+	moduleIdString := chi.URLParam(r, "moduleId")
+	moduleId, err := strconv.Atoi(moduleIdString)
 	if err != nil {
 		http.Error(w, "Could not parse id value!", http.StatusBadRequest)
 		return
 	}
 
-	rows, err := conn.Query(ctx, `with recursive module_part_recursive as (
-			select id, name, value_type, parent_id from module_part
-			where id=$1 and parent_id is null
-			union select c.id, c.name, c.value_type, c.parent_id from module_part c inner join module_part_recursive cp on cp.id=c.parent_id 
-		) select * from module_part_recursive;`, componentId)
-
+	moduleParts, err := data.GetModuleParts(state, moduleId)
 	if err != nil {
-		http.Error(w, "Could not fetch data from database!", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	type modulePart struct {
-		Id        int
-		Name      string
-		ValueType int
-		ParentId  int
-	}
-	moduleParts := make([]modulePart, 0, 10)
-
-	var id int
-	var name string
-	var valueType int
-	var parentId sql.NullInt32
-	for rows.Next() {
-		err = rows.Scan(&id, &name, &valueType, &parentId)
-		if err != nil {
-			http.Error(w, "Error while fetching from database!"+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		pid := 0
-		if parentId.Valid {
-			pid = int(parentId.Int32)
-		}
-		moduleParts = append(moduleParts, modulePart{Id: id, Name: name, ValueType: valueType, ParentId: pid})
-	}
-	componentCount := rows.CommandTag().RowsAffected()
-	if componentCount == 0 {
-		w.WriteHeader(http.StatusNotFound)
+		response.InternalError(w, err)
 		return
 	}
 
@@ -88,7 +55,7 @@ func GetModuleById(w http.ResponseWriter, r *http.Request) {
 		ValueType: moduleParts[0].ValueType,
 		Children:  make([]*componentResponse, 0),
 	}
-	nodeMap := make(map[int]*componentResponse, componentCount)
+	nodeMap := make(map[int]*componentResponse)
 	nodeMap[root.Id] = &root
 	for _, c := range moduleParts[1:] {
 		if val, ok := nodeMap[c.ParentId]; ok {
@@ -106,8 +73,7 @@ func GetModuleById(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(&root)
+	response.Json(w, &root)
 }
 
 func ListComponents(w http.ResponseWriter, r *http.Request) {
@@ -118,39 +84,19 @@ func ListComponents(w http.ResponseWriter, r *http.Request) {
 // Root components are module_part that have no parent. Used to group
 // other components and editor can only filter using root components
 func GetRootComponents(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	conn, err := pgxpool.Connect(ctx, db.ConnectionString)
+	state, err := common.InitState(r)
 	if err != nil {
-		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
+		response.ErrorWhileInitializing(w, err)
 		return
 	}
 
-	rows, err := conn.Query(ctx, `select id, name from "module_part" where parent_id is null`)
+	components, err := data.GetRootModuleParts(state)
 	if err != nil {
-		http.Error(w, "Could not fetch data from database!", http.StatusInternalServerError)
+		response.InternalError(w, err)
 		return
 	}
-	defer rows.Close()
 
-	type modulePart struct {
-		Id   int    `json:"id"`
-		Name string `json:"name"`
-	}
-	components := make([]modulePart, 0, 100)
-
-	var id int
-	var name string
-	for rows.Next() {
-		err = rows.Scan(&id, &name)
-		if err != nil {
-			http.Error(w, "Error while fetching from database! "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		components = append(components, modulePart{Id: id, Name: name})
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(&components)
+	response.Json(w, &components)
 }
 
 func DeleteComponent(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +128,7 @@ func CreateComponent(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var req createComponentRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err := j.Decode(r, &req)
 	if err != nil {
 		http.Error(w, "Could not parse request body!", http.StatusBadRequest)
 		return

@@ -1,4 +1,4 @@
-package types
+package parser
 
 import "encoding/json"
 
@@ -20,7 +20,6 @@ const (
 	Text       EditorInputType = 12
 	TextArea   EditorInputType = 13
 )
-
 */
 func ParseType(valueType EditorInputType, value json.RawMessage) {
 	switch valueType {

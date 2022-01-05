@@ -2,9 +2,9 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
+	"github.com/a98c14/hyperion/common/response"
 	"github.com/a98c14/hyperion/db"
 	"github.com/jackc/pgx/v4"
 )
@@ -35,7 +35,8 @@ func ListVersions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	json.NewEncoder(w).Encode(v)
+
+	response.Json(w, v)
 }
 
 func GetVersionById(w http.ResponseWriter, r *http.Request) {

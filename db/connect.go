@@ -26,6 +26,5 @@ func InitDatabase(ctx context.Context) (*pgxpool.Pool, error) {
 }
 
 func GetConnectionPool(ctx context.Context) (*pgxpool.Pool, error) {
-	// conn, err := Pool.Acquire(ctx)
 	return Pool, nil
 }
