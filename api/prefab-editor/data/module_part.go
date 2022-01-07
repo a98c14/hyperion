@@ -14,6 +14,13 @@ type ModulePart struct {
 	ParentId  int
 }
 
+type ModulePartDB struct {
+	Id        int
+	Name      string
+	ValueType int
+	ParentId  sql.NullInt32
+}
+
 type RootModule struct {
 	Id   int    `json:"id"`
 	Name string `json:"name"`
@@ -37,7 +44,7 @@ func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 	var valueType int
 	var parentId sql.NullInt32
 	for rows.Next() {
-		err = rows.Scan(&moduleId, &name, &valueType, &parentId)
+		err = rows.Scan(&id, &name, &valueType, &parentId)
 		if err != nil {
 			return nil, err
 		}

@@ -2,28 +2,28 @@ package parser
 
 import "encoding/json"
 
-/*
-
-const (
-	Object     EditorInputType = 0
-	Range      EditorInputType = 1
-	Color      EditorInputType = 2
-	Animation  EditorInputType = 3
-	Sprite     EditorInputType = 4
-	Percentage EditorInputType = 5
-	Vec2       EditorInputType = 6
-	Vec3       EditorInputType = 7
-	Vec4       EditorInputType = 8
-	Nested     EditorInputType = 9
-	Bool       EditorInputType = 10
-	Number     EditorInputType = 11
-	Text       EditorInputType = 12
-	TextArea   EditorInputType = 13
-)
-*/
-func ParseType(valueType EditorInputType, value json.RawMessage) {
+// TODO(selim): Parse `value` based on type. Currently module
+// part values are returned directly as json.RawMessage. It works
+// but results are not validated. Here `value` should be converted
+// to desired and return error if it can't be converted.
+func ParseType(valueType EditorInputType, value string) (json.RawMessage, error) {
 	switch valueType {
 	case Range:
-
+		break
+	case Color:
+		break
+	case Animation:
+		break
+	case Sprite:
+		break
+	case Percentage:
+		break
+	case Vec2:
+		break
+	case Vec3:
+		break
+	case Vec4:
+		break
 	}
+	return nil, nil
 }

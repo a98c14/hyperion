@@ -3,19 +3,59 @@ package handler
 import (
 	"database/sql"
 	"net/http"
+	"strconv"
 
 	"github.com/a98c14/hyperion/api/prefab-editor/data"
 	"github.com/a98c14/hyperion/common"
 	"github.com/a98c14/hyperion/common/json"
 	"github.com/a98c14/hyperion/common/response"
+	"github.com/go-chi/chi/v5"
 )
 
-func GetPrefabById(id int, w http.ResponseWriter) {
+func GetPrefabById(w http.ResponseWriter, r *http.Request) {
+	state, err := common.InitState(r)
+	if err != nil {
+		response.ErrorWhileInitializing(w, err)
+		return
+	}
 
+	prefabIdStr := chi.URLParam(r, "prefabId")
+	prefabId, err := strconv.Atoi(prefabIdStr)
+	if err != nil {
+		response.BadRequest(w, err)
+		return
+	}
+
+	versionIdStr := chi.URLParam(r, "versionId")
+	versionId, err := strconv.Atoi(versionIdStr)
+	if err != nil {
+		response.BadRequest(w, err)
+		return
+	}
+
+	prefabs, err := data.GetPrefabById(state, prefabId, versionId)
+	if err != nil {
+		response.InternalError(w, err)
+		return
+	}
+
+	response.Json(w, prefabs)
 }
 
-func ListPrefabs(w http.ResponseWriter) {
+func ListPrefabs(w http.ResponseWriter, r *http.Request) {
+	state, err := common.InitState(r)
+	if err != nil {
+		response.ErrorWhileInitializing(w, err)
+		return
+	}
 
+	prefabs, err := data.GetRootPrefabs(state)
+	if err != nil {
+		response.InternalError(w, err)
+		return
+	}
+
+	response.Json(w, prefabs)
 }
 
 func CreatePrefab(w http.ResponseWriter, r *http.Request) {

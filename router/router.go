@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 
 	prefab "github.com/a98c14/hyperion/api/prefab-editor/handler"
@@ -18,9 +19,17 @@ func HandleCors(next http.Handler) http.Handler {
 	})
 }
 
+func LogRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(r.Method, r.URL, r.RemoteAddr)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func New() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(HandleCors)
+	r.Use(LogRequest)
 	// Versions
 	r.Route("/versions", func(r chi.Router) {
 		r.Get("/", handler.ListVersions)
@@ -33,7 +42,7 @@ func New() *chi.Mux {
 		r.Post("/", prefab.CreateComponent)
 		r.Delete("/", prefab.DeleteComponent)
 		r.Get("/{moduleId}", prefab.GetModuleById)
-		r.Get("/", prefab.GetRootComponents)
+		r.Get("/", prefab.GetRootModules)
 	})
 
 	// Prefabs

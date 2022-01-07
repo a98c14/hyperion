@@ -83,7 +83,7 @@ func ListComponents(w http.ResponseWriter, r *http.Request) {
 // Returns all the root components.
 // Root components are module_part that have no parent. Used to group
 // other components and editor can only filter using root components
-func GetRootComponents(w http.ResponseWriter, r *http.Request) {
+func GetRootModules(w http.ResponseWriter, r *http.Request) {
 	state, err := common.InitState(r)
 	if err != nil {
 		response.ErrorWhileInitializing(w, err)

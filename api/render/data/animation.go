@@ -14,6 +14,7 @@ type Animation struct {
 	TransitionType int    `json:"transitionType"`
 	Sprites        []int  `json:"sprites"`
 }
+
 type ByName []*Animation
 
 func (a ByName) Len() int           { return len(a) }
