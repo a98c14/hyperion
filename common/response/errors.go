@@ -3,16 +3,30 @@ package response
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/a98c14/hyperion/common/json"
 )
+
+type resp struct {
+	Message string
+}
 
 func InternalError(w http.ResponseWriter, err error) {
 	fmt.Println("Internal Error: " + err.Error())
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+	wrapped := resp{
+		Message: err.Error(),
+	}
+	w.WriteHeader(http.StatusInternalServerError)
+	json.Encode(w, &wrapped)
 }
 
 func BadRequest(w http.ResponseWriter, err error) {
 	fmt.Println("Bad Request: ", err.Error())
-	http.Error(w, err.Error(), http.StatusBadRequest)
+	wrapped := resp{
+		Message: err.Error(),
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	json.Encode(w, &wrapped)
 }
 
 func ErrorWhileInitializing(w http.ResponseWriter, err error) {

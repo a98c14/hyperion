@@ -2,11 +2,13 @@ package handler
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/a98c14/hyperion/api/prefab-editor/data"
 	"github.com/a98c14/hyperion/common"
+	xerrors "github.com/a98c14/hyperion/common/errors"
 	"github.com/a98c14/hyperion/common/json"
 	"github.com/a98c14/hyperion/common/response"
 	"github.com/go-chi/chi/v5"
@@ -26,11 +28,17 @@ func GetPrefabById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get version id. Use `BaseVersion` id as default
+	var versionId int
 	versionIdStr := chi.URLParam(r, "versionId")
-	versionId, err := strconv.Atoi(versionIdStr)
-	if err != nil {
-		response.BadRequest(w, err)
-		return
+	if versionIdStr == "" {
+		versionId = 1 // TODO(selim): This should be the base version id.
+	} else {
+		versionId, err = strconv.Atoi(versionIdStr)
+		if err != nil {
+			response.BadRequest(w, err)
+			return
+		}
 	}
 
 	prefabs, err := data.GetPrefabById(state, prefabId, versionId)
@@ -65,6 +73,7 @@ func CreatePrefab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO(selim): Should insert list of prefabs
 	type model struct {
 		Name     string
 		ParentId sql.NullInt32
@@ -74,7 +83,7 @@ func CreatePrefab(w http.ResponseWriter, r *http.Request) {
 	var req model
 	err = json.Decode(r, &req)
 	if err != nil {
-		response.BadRequest(w, err)
+		response.BadRequest(w, fmt.Errorf("CreatePrefab:85 | Decode Request -> %w", err))
 		return
 	}
 
@@ -82,8 +91,13 @@ func CreatePrefab(w http.ResponseWriter, r *http.Request) {
 	conn := state.Conn
 
 	exists, err := data.DoesNameExist(ctx, conn, req.Name)
-	if exists || err != nil {
+	if err != nil {
 		response.InternalError(w, err)
+		return
+	}
+
+	if exists {
+		response.BadRequest(w, xerrors.ExistsError)
 		return
 	}
 
@@ -101,11 +115,13 @@ func CreatePrefab(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = data.InsertPrefabModulePartValues(ctx, conn, int(prefabId.Int32), req.Modules)
+	// TODO(selim): Given version id should be for the `BaseVersion` id
+	err = data.InsertPrefabModulePartValues(ctx, conn, int(prefabId.Int32), 1, req.Modules)
 	if err != nil {
 		response.InternalError(w, err)
 		return
 	}
+
 }
 
 func UpdatePrefab(id int, w http.ResponseWriter, r *http.Request) {

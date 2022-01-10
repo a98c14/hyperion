@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	prefab "github.com/a98c14/hyperion/api/prefab-editor/handler"
 	render "github.com/a98c14/hyperion/api/render/handler"
@@ -21,7 +22,7 @@ func HandleCors(next http.Handler) http.Handler {
 
 func LogRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r.Method, r.URL, r.RemoteAddr)
+		fmt.Println(r.Method, r.URL, r.RemoteAddr, time.Now().Format("01-02-2006 15:04:05"))
 		next.ServeHTTP(w, r)
 	})
 }
@@ -38,9 +39,9 @@ func New() *chi.Mux {
 
 	// Components
 	r.Route("/modules", func(r chi.Router) {
-		r.Put("/", prefab.UpdateComponent)
-		r.Post("/", prefab.CreateComponent)
-		r.Delete("/", prefab.DeleteComponent)
+		r.Put("/", prefab.UpdateModule)
+		r.Post("/", prefab.CreateModule)
+		r.Delete("/", prefab.DeleteModule)
 		r.Get("/{moduleId}", prefab.GetModuleById)
 		r.Get("/", prefab.GetRootModules)
 	})
@@ -48,6 +49,9 @@ func New() *chi.Mux {
 	// Prefabs
 	r.Route("/prefabs", func(r chi.Router) {
 		r.Post("/", prefab.CreatePrefab)
+		r.Get("/", prefab.ListPrefabs)
+		r.Get("/{prefabId}", prefab.GetPrefabById)
+		r.Get("/{prefabId}/versions/{versionId}", prefab.GetPrefabById)
 	})
 
 	// Textures

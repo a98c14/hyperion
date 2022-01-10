@@ -1,0 +1,91 @@
+GET http://localhost:8000/prefabs HTTP/1.1
+
+###
+
+GET http://localhost:8000/prefabs/6 HTTP/1.1
+
+###
+
+POST http://localhost:8000/prefabs HTTP/1.1
+content-type: application/json
+
+# Name     string
+# ParentId sql.NullInt32
+# Modules  []data.PrefabModulePartValue
+#   ArrayIndex   int
+#	ValueType    int
+#	ModulePartId int
+#	Value        string
+{
+    "name": "EnemyBoar",
+    "parentId": null,
+    "modules": [
+        {
+            "ArrayIndex": 0,
+            "ValueType": 10,
+            "ModulePartId": 36,
+            "Value": false
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 10,
+            "ModulePartId": 38,
+            "Value": true
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 39,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 40,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 41,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 42,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 43,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 44,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 45,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 46,
+            "Value": 20
+        },
+        {
+            "ArrayIndex": 0,
+            "ValueType": 11,
+            "ModulePartId": 47,
+            "Value": 20
+        }
+    ]
+}
+

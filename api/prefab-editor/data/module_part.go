@@ -2,16 +2,27 @@ package data
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/a98c14/hyperion/common"
+	e "github.com/a98c14/hyperion/common/errors"
 )
 
-type ModulePart struct {
+type ModulePartNode struct {
 	Id        int
-	Name      string
 	ValueType int
-	ParentId  int
+	ParentId  sql.NullInt32
+	Name      string
+	Value     json.RawMessage
+}
+
+type ModulePart struct {
+	Id         int
+	Name       string
+	ValueType  int
+	ParentId   int
+	ParentName string
 }
 
 type ModulePartDB struct {
@@ -24,6 +35,85 @@ type ModulePartDB struct {
 type RootModule struct {
 	Id   int    `json:"id"`
 	Name string `json:"name"`
+}
+
+type ModulePartInfo struct {
+	ValueType int
+	Children  json.RawMessage
+}
+
+func DoesModulePartExist(state common.State, moduleId int) (bool, error) {
+	var exists bool
+	err := state.Conn.QueryRow(state.Context, "select exists(select 1 from module_part where id=$1)", moduleId).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func DoesModulePartWithNameExist(state common.State, moduleName string) (bool, error) {
+	var exists bool
+	err := state.Conn.QueryRow(state.Context, "select exists(select 1 from module_part where name=$1)", moduleName).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// Creates module hashmap for all module parts for given root module id.
+// `Module Parent Name+Module Name` is used as key since module names are only unique
+// between siblings.
+func GetModulePartMap(state common.State, moduleId int) (map[string]*ModulePart, error) {
+	rows, err := state.Conn.Query(state.Context, `
+		with recursive module_part_recursive as (
+			select 
+				id, 
+				name, 
+				value_type, 
+				parent_id, 
+				case when parent_id is not null then name else null end as parent_name 
+			from module_part
+			where id=$1 and parent_id is null
+			union select 
+				c.id, 
+				c.name, 
+				c.value_type, 
+				c.parent_id, 
+				(select name from module_part where id=cp.id) 
+			from module_part c inner join module_part_recursive cp on cp.id=c.parent_id)
+		select * from module_part_recursive;`, moduleId)
+
+	if err != nil {
+		return nil, e.Wrap("GetModulePartMap", err)
+	}
+	defer rows.Close()
+
+	modulePartMap := make(map[string]*ModulePart)
+	var parentId sql.NullInt32
+	var parentName sql.NullString
+	for rows.Next() {
+		module := &ModulePart{}
+		err = rows.Scan(&module.Id, &module.Name, &module.ValueType, &parentId, &parentName)
+		if err != nil {
+			return nil, e.Wrap("GetModulePartMap", err)
+		}
+
+		if parentId.Valid && parentName.Valid {
+			module.ParentId = int(parentId.Int32)
+			module.ParentName = parentName.String
+			modulePartMap[GetModulePartKey(module.ParentName, module.Name)] = module
+		} else {
+			modulePartMap[module.Name] = module
+		}
+	}
+
+	moduleCount := rows.CommandTag().RowsAffected()
+	if moduleCount == 0 {
+		return nil, errors.New("given module has no part attached")
+	}
+	return modulePartMap, nil
 }
 
 func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
@@ -54,8 +144,8 @@ func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 		}
 		moduleParts = append(moduleParts, &ModulePart{Id: id, Name: name, ValueType: valueType, ParentId: pid})
 	}
-	componentCount := rows.CommandTag().RowsAffected()
-	if componentCount == 0 {
+	moduleCount := rows.CommandTag().RowsAffected()
+	if moduleCount == 0 {
 		return nil, errors.New("given module has no part attached")
 	}
 	return moduleParts, nil
@@ -79,4 +169,105 @@ func GetRootModuleParts(state common.State) ([]RootModule, error) {
 		rootModules = append(rootModules, RootModule{Id: id, Name: name})
 	}
 	return rootModules, nil
+}
+
+// Delets a module part node and all of its children from database
+func DeleteModulePartTree(state common.State, id int) error {
+	_, err := state.Conn.Exec(state.Context, `
+		with recursive module_part_recursive as (
+			select 
+				id, 
+				parent_id, 
+			from module_part
+			where id=$1 and deleted_date is null
+			union select 
+				c.id, 
+				c.parent_id, 
+			from module_part c 
+			inner join module_part_recursive cp on cp.id=c.parent_id
+			where deleted_date is null
+		) update module_part set deleted_date=now() where id in (select id from module_part_recursive);`, id)
+
+	if err != nil {
+		return e.Wrap("DeleteModulePartTree", err)
+	}
+	return nil
+}
+
+// Inserts a module part node with all of its children to database
+func InsertModulePartTree(state common.State, node *ModulePartNode) error {
+	// Start transaction. If all modules can not be added successfully, don't
+	// insert anything
+	tx, err := state.Conn.Begin(state.Context)
+	if err != nil {
+		return e.Wrap("InsertModulePartTree", err)
+	}
+	defer tx.Rollback(state.Context)
+	c := make(chan *ModulePartNode, 500)
+	c <- node
+	processedObjects := 0
+
+	// Process nodes in json object tree
+	for n := range c {
+		// Insert current node to database and store its id
+		id, err := InsertModulePart(state, n)
+		if err != nil {
+			return e.Wrap("InsertModulePartTree", err)
+		}
+		processedObjects++
+
+		// Check if current value is a json object
+		m := make(map[string]json.RawMessage, 20)
+		err = json.Unmarshal(n.Value, &m)
+		if err != nil {
+			// If there is no more elements to process, close the channel
+			if len(c) == 0 {
+				close(c)
+			}
+
+			// If there is an error during json parsing for root node, exit early with error
+			if processedObjects == 1 {
+				return e.Wrap("InsertModulePartTree", err)
+			}
+			continue
+		}
+
+		// Add all values to process channel
+		for k := range m {
+			var pi ModulePartInfo
+			err = json.Unmarshal(m[k], &pi)
+			if err != nil {
+				return e.Wrap("InsertModulePartTree", err)
+			}
+			c <- &ModulePartNode{
+				ParentId:  id,
+				Name:      k,
+				ValueType: pi.ValueType,
+				Value:     pi.Children,
+			}
+		}
+	}
+
+	// Commit transaction
+	err = tx.Commit(state.Context)
+	if err != nil {
+		return e.Wrap("InsertModulePartTree", err)
+	}
+
+	return nil
+}
+
+// Inserts a single module part to database
+func InsertModulePart(state common.State, node *ModulePartNode) (sql.NullInt32, error) {
+	var id sql.NullInt32
+	err := state.Conn.QueryRow(state.Context,
+		`insert into "module_part" 
+		 (name, value_type, parent_id) 
+		 values($1, $2, $3) returning id`,
+		node.Name, node.ValueType, node.ParentId).Scan(&id)
+	return id, err
+}
+
+func GetModulePartKey(parent string, child string) string {
+	return parent + "." + child
 }
