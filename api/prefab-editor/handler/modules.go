@@ -10,6 +10,7 @@ import (
 	"github.com/a98c14/hyperion/api/prefab-editor/data"
 	"github.com/a98c14/hyperion/common"
 	"github.com/a98c14/hyperion/common/errors"
+	e "github.com/a98c14/hyperion/common/errors"
 	"github.com/a98c14/hyperion/common/response"
 	"github.com/go-chi/chi/v5"
 )
@@ -97,6 +98,7 @@ func GetRootModules(w http.ResponseWriter, r *http.Request) {
 }
 
 func DeleteModule(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func UpdateModule(w http.ResponseWriter, r *http.Request) {
@@ -113,13 +115,13 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 	var req request
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		response.BadRequest(w, errors.WrapMsg("UpdateModule", response.ParseError, err))
+		response.BadRequest(w, e.WrapMsg("UpdateModule", response.ParseError, err))
 		return
 	}
 
 	exists, err := data.DoesModulePartExist(state, req.Id)
 	if err != nil {
-		response.InternalError(w, errors.Wrap("UpdateModule", err))
+		response.InternalError(w, e.Wrap("UpdateModule", err))
 		return
 	}
 
@@ -130,8 +132,12 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 
 	// Parts that currently exist in database for the module
 	modulePartMapDb, err := data.GetModulePartMap(state, req.Id)
+	if err != nil {
+		response.InternalError(w, e.Wrap("UpdateModule", err))
+		return
+	}
 
-	// Parts that exists in request (mostly made by Unity) for the module
+	// Parts that exists in incoming request for the module
 	modulePartMapUnity := make(map[string]*data.ModulePartNode)
 
 	// Create processing channel
@@ -188,14 +194,21 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for k, dbModule := range modulePartMapDb {
-		if v, ok := modulePartMapUnity[k]; !ok {
-			// Part exists in database but not Unity, delete part
+		// Part exists in database but not Unity, delete part
+		if _, ok := modulePartMapUnity[k]; !ok {
+			err = data.DeleteModulePartTree(state, dbModule.Id)
+			if err != nil {
+				response.InternalError(w, e.WrapMsg("UpdateModule", "during module part tree deletion", err))
+			}
 		}
 
 	}
 	for k, unityModule := range modulePartMapUnity {
 		if _, ok := modulePartMapDb[k]; !ok {
-			// Part exists in Unity but not database, create part
+			err = data.InsertModulePartTree(state, unityModule)
+			if err != nil {
+				response.InternalError(w, e.WrapMsg("UpdateModule", "during module part tree insertion", err))
+			}
 		}
 	}
 
