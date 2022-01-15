@@ -39,8 +39,7 @@ func New() *chi.Mux {
 
 	// Components
 	r.Route("/modules", func(r chi.Router) {
-		r.Put("/", prefab.UpdateModule)
-		r.Post("/", prefab.CreateModule)
+		r.Post("/", prefab.SyncModule)
 		r.Delete("/", prefab.DeleteModule)
 		r.Get("/{moduleId}", prefab.GetModuleById)
 		r.Get("/", prefab.GetRootModules)

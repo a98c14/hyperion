@@ -7,13 +7,15 @@ import (
 
 	"github.com/a98c14/hyperion/common"
 	e "github.com/a98c14/hyperion/common/errors"
+	"github.com/jackc/pgx/v4"
 )
 
 type ModulePartNode struct {
-	Id        int
-	ValueType int
-	ParentId  sql.NullInt32
 	Name      string
+	ValueType int
+	Tooltip   string
+	IsArray   bool
+	ParentId  sql.NullInt32
 	Value     json.RawMessage
 }
 
@@ -21,6 +23,8 @@ type ModulePart struct {
 	Id         int
 	Name       string
 	ValueType  int
+	Tooltip    string
+	IsArray    bool
 	ParentId   int
 	ParentName string
 }
@@ -29,6 +33,8 @@ type ModulePartDB struct {
 	Id        int
 	Name      string
 	ValueType int
+	Tooltip   string
+	IsArray   bool
 	ParentId  sql.NullInt32
 }
 
@@ -39,12 +45,14 @@ type RootModule struct {
 
 type ModulePartInfo struct {
 	ValueType int
+	Tooltip   string
+	IsArray   bool
 	Children  json.RawMessage
 }
 
 func DoesModulePartExist(state common.State, moduleId int) (bool, error) {
 	var exists bool
-	err := state.Conn.QueryRow(state.Context, "select exists(select 1 from module_part where id=$1)", moduleId).Scan(&exists)
+	err := state.Conn.QueryRow(state.Context, "select exists(select 1 from module_part where id=$1 and deleted_date is null)", moduleId).Scan(&exists)
 	if err != nil {
 		return false, err
 	}
@@ -54,7 +62,7 @@ func DoesModulePartExist(state common.State, moduleId int) (bool, error) {
 
 func DoesModulePartWithNameExist(state common.State, moduleName string) (bool, error) {
 	var exists bool
-	err := state.Conn.QueryRow(state.Context, "select exists(select 1 from module_part where name=$1)", moduleName).Scan(&exists)
+	err := state.Conn.QueryRow(state.Context, "select exists(select 1 from module_part where name=$1 and deleted_date is null)", moduleName).Scan(&exists)
 	if err != nil {
 		return false, err
 	}
@@ -62,10 +70,36 @@ func DoesModulePartWithNameExist(state common.State, moduleName string) (bool, e
 	return exists, nil
 }
 
+// Returns the Id of the module for given `name` and `parent_id`. `parent_id` is used because
+// names are only unique between siblings
+func GetModulePartIdWithName(state common.State, moduleName string, parentId sql.NullInt32) (sql.NullInt32, error) {
+	var id sql.NullInt32
+	var err error
+
+	// TODO(selim): Is there a better way to do this?
+	if parentId.Valid {
+		err = state.Conn.QueryRow(state.Context,
+			`select id from module_part 
+			where name=$1 and parent_id=$2 and deleted_date is null`, moduleName, parentId.Int32).Scan(&id)
+	} else {
+		err = state.Conn.QueryRow(state.Context,
+			`select id from module_part 
+			where name=$1 and parent_id is null and deleted_date is null`, moduleName).Scan(&id)
+	}
+
+	if err != nil && err == pgx.ErrNoRows {
+		return id, nil
+	} else if err != nil {
+		return id, err
+	}
+
+	return id, nil
+}
+
 // Creates module hashmap for all module parts for given root module id.
 // `Module Parent Name+Module Name` is used as key since module names are only unique
 // between siblings.
-func GetModulePartMap(state common.State, moduleId int) (map[string]*ModulePart, error) {
+func GetModulePartMap(state common.State, moduleName string) (map[string]*ModulePart, error) {
 	rows, err := state.Conn.Query(state.Context, `
 		with recursive module_part_recursive as (
 			select 
@@ -73,17 +107,22 @@ func GetModulePartMap(state common.State, moduleId int) (map[string]*ModulePart,
 				name, 
 				value_type, 
 				parent_id, 
-				case when parent_id is not null then name else null end as parent_name 
+				case when parent_id is not null then name else null end as parent_name,
+				is_array,
+				tooltip
 			from module_part
-			where id=$1 and parent_id is null
+			where name=$1 and parent_id is null and deleted_date is null
 			union select 
 				c.id, 
 				c.name, 
 				c.value_type, 
 				c.parent_id, 
-				(select name from module_part where id=cp.id) 
-			from module_part c inner join module_part_recursive cp on cp.id=c.parent_id)
-		select * from module_part_recursive;`, moduleId)
+				(select name from module_part where id=cp.id),
+				c.is_array,
+				c.tooltip
+			from module_part c inner join module_part_recursive cp on cp.id=c.parent_id
+			where deleted_date is null)
+		select * from module_part_recursive;`, moduleName)
 
 	if err != nil {
 		return nil, e.Wrap("GetModulePartMap", err)
@@ -92,12 +131,16 @@ func GetModulePartMap(state common.State, moduleId int) (map[string]*ModulePart,
 
 	modulePartMap := make(map[string]*ModulePart)
 	var parentId sql.NullInt32
-	var parentName sql.NullString
+	var parentName, tooltip sql.NullString
 	for rows.Next() {
 		module := &ModulePart{}
-		err = rows.Scan(&module.Id, &module.Name, &module.ValueType, &parentId, &parentName)
+		err = rows.Scan(&module.Id, &module.Name, &module.ValueType, &parentId, &parentName, &module.IsArray, &tooltip)
 		if err != nil {
 			return nil, e.Wrap("GetModulePartMap", err)
+		}
+
+		if tooltip.Valid {
+			module.Tooltip = tooltip.String
 		}
 
 		if parentId.Valid && parentName.Valid {
@@ -119,8 +162,10 @@ func GetModulePartMap(state common.State, moduleId int) (map[string]*ModulePart,
 func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 	rows, err := state.Conn.Query(state.Context, `with recursive module_part_recursive as (
 		select id, name, value_type, parent_id from module_part
-		where id=$1 and parent_id is null
-		union select c.id, c.name, c.value_type, c.parent_id from module_part c inner join module_part_recursive cp on cp.id=c.parent_id 
+		where id=$1 and parent_id is null and deleted_date is null
+		union select c.id, c.name, c.value_type, c.parent_id from module_part c
+		inner join module_part_recursive cp on cp.id=c.parent_id 
+		where deleted_date is null 
 	) select * from module_part_recursive;`, moduleId)
 
 	if err != nil {
@@ -152,7 +197,7 @@ func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 }
 
 func GetRootModuleParts(state common.State) ([]RootModule, error) {
-	rows, err := state.Conn.Query(state.Context, `select id, name from "module_part" where parent_id is null`)
+	rows, err := state.Conn.Query(state.Context, `select id, name from "module_part" where parent_id is null and deleted_date is null`)
 	if err != nil {
 		return nil, err
 	}
@@ -177,12 +222,12 @@ func DeleteModulePartTree(state common.State, id int) error {
 		with recursive module_part_recursive as (
 			select 
 				id, 
-				parent_id, 
+				parent_id
 			from module_part
 			where id=$1 and deleted_date is null
 			union select 
 				c.id, 
-				c.parent_id, 
+				c.parent_id
 			from module_part c 
 			inner join module_part_recursive cp on cp.id=c.parent_id
 			where deleted_date is null
@@ -205,7 +250,7 @@ func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 	defer tx.Rollback(state.Context)
 	c := make(chan *ModulePartNode, 500)
 	c <- node
-	processedObjects := 0
+	//	processedObjects := 0
 
 	// Process nodes in json object tree
 	for n := range c {
@@ -214,7 +259,7 @@ func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 		if err != nil {
 			return e.Wrap("InsertModulePartTree", err)
 		}
-		processedObjects++
+		//		processedObjects++
 
 		// Check if current value is a json object
 		m := make(map[string]json.RawMessage, 20)
@@ -225,10 +270,10 @@ func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 				close(c)
 			}
 
-			// If there is an error during json parsing for root node, exit early with error
-			if processedObjects == 1 {
-				return e.Wrap("InsertModulePartTree", err)
-			}
+			// // If there is an error during json parsing for root node, exit early with error
+			// if processedObjects == 1 {
+			// 	return e.Wrap("InsertModulePartTree", err)
+			// }
 			continue
 		}
 
@@ -244,6 +289,8 @@ func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 				Name:      k,
 				ValueType: pi.ValueType,
 				Value:     pi.Children,
+				Tooltip:   pi.Tooltip,
+				IsArray:   pi.IsArray,
 			}
 		}
 	}

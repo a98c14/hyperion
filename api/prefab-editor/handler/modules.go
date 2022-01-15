@@ -9,7 +9,6 @@ import (
 
 	"github.com/a98c14/hyperion/api/prefab-editor/data"
 	"github.com/a98c14/hyperion/common"
-	"github.com/a98c14/hyperion/common/errors"
 	e "github.com/a98c14/hyperion/common/errors"
 	"github.com/a98c14/hyperion/common/response"
 	"github.com/go-chi/chi/v5"
@@ -39,25 +38,25 @@ func GetModuleById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type componentResponse struct {
-		Id        int                  `json:"id"`
-		Name      string               `json:"name"`
-		ValueType int                  `json:"valueType"`
-		Children  []*componentResponse `json:"children"`
+	type modulePartResp struct {
+		Id        int               `json:"id"`
+		Name      string            `json:"name"`
+		ValueType int               `json:"valueType"`
+		Children  []*modulePartResp `json:"children"`
 	}
 
 	/* Create object tree from module part list. Components are always ordered from root to child*/
-	root := componentResponse{
+	root := modulePartResp{
 		Id:        moduleParts[0].Id,
 		Name:      moduleParts[0].Name,
 		ValueType: moduleParts[0].ValueType,
-		Children:  make([]*componentResponse, 0),
+		Children:  make([]*modulePartResp, 0),
 	}
-	nodeMap := make(map[int]*componentResponse)
+	nodeMap := make(map[int]*modulePartResp)
 	nodeMap[root.Id] = &root
 	for _, c := range moduleParts[1:] {
 		if val, ok := nodeMap[c.ParentId]; ok {
-			cr := componentResponse{
+			cr := modulePartResp{
 				Id:        c.Id,
 				Name:      c.Name,
 				ValueType: c.ValueType,
@@ -101,39 +100,54 @@ func DeleteModule(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func UpdateModule(w http.ResponseWriter, r *http.Request) {
+// Add module if it doesn't exist, update module if it does
+// if there is no difference do nothing
+func SyncModule(w http.ResponseWriter, r *http.Request) {
 	state, err := common.InitState(r)
 	if err != nil {
 		response.ErrorWhileInitializing(w, err)
 	}
 
+	// Parse request
+	// TODO(selim): Add former name field to request.
 	type request struct {
-		Id        int
 		Name      string
 		Structure json.RawMessage
 	}
 	var req request
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		response.BadRequest(w, e.WrapMsg("UpdateModule", response.ParseError, err))
+		response.BadRequest(w, e.WrapMsg("SyncModule", response.ParseError, err))
 		return
 	}
 
-	exists, err := data.DoesModulePartExist(state, req.Id)
+	// Check if module id or not
+	id, err := data.GetModulePartIdWithName(state, req.Name, sql.NullInt32{})
 	if err != nil {
-		response.InternalError(w, e.Wrap("UpdateModule", err))
+
+		response.InternalError(w, e.Wrap("SyncModule", err))
 		return
 	}
 
-	if !exists {
-		response.BadRequest(w, fmt.Errorf("module with id %d does not exist", req.Id))
+	// If module doesn't exist in database; create module and exit
+	if !id.Valid {
+		initialNode := data.ModulePartNode{
+			ValueType: 0,
+			ParentId:  sql.NullInt32{},
+			Name:      req.Name,
+			Value:     req.Structure,
+		}
+
+		data.InsertModulePartTree(state, &initialNode)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Successfully created module part!")
 		return
 	}
 
 	// Parts that currently exist in database for the module
-	modulePartMapDb, err := data.GetModulePartMap(state, req.Id)
+	modulePartMapDb, err := data.GetModulePartMap(state, req.Name)
 	if err != nil {
-		response.InternalError(w, e.Wrap("UpdateModule", err))
+		response.InternalError(w, e.Wrap("SyncModule", err))
 		return
 	}
 
@@ -143,7 +157,6 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 	// Create processing channel
 	// TODO(selim): Is 500 correct for channel size?
 	rootNode := data.ModulePartNode{
-		Id:        0,
 		ValueType: 0,
 		ParentId:  sql.NullInt32{},
 		Name:      req.Name,
@@ -169,11 +182,13 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 
 			// If there is an error during json parsing for root node, exit early with error
 			if processedObjects == 1 {
-				http.Error(w, "Root object doesn't have a valid json", http.StatusBadRequest)
+				response.InternalError(w, e.WrapMsg("SyncModule", "Root object doesn't have a valid json", err))
 				return
 			}
 			continue
 		}
+
+		id, _ = data.GetModulePartIdWithName(state, n.Name, n.ParentId)
 
 		// Add all values to process channel
 		for child := range children {
@@ -187,6 +202,7 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 				Name:      child,
 				ValueType: pi.ValueType,
 				Value:     pi.Children,
+				ParentId:  id,
 			}
 			c <- childNode
 			modulePartMapUnity[data.GetModulePartKey(n.Name, child)] = &childNode
@@ -194,6 +210,11 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for k, dbModule := range modulePartMapDb {
+		// Skip the root module
+		if dbModule.ParentId == 0 {
+			continue
+		}
+
 		// Part exists in database but not Unity, delete part
 		if _, ok := modulePartMapUnity[k]; !ok {
 			err = data.DeleteModulePartTree(state, dbModule.Id)
@@ -201,8 +222,8 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 				response.InternalError(w, e.WrapMsg("UpdateModule", "during module part tree deletion", err))
 			}
 		}
-
 	}
+
 	for k, unityModule := range modulePartMapUnity {
 		if _, ok := modulePartMapDb[k]; !ok {
 			err = data.InsertModulePartTree(state, unityModule)
@@ -211,52 +232,4 @@ func UpdateModule(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
-}
-
-// Creates a new module part structure
-func CreateModule(w http.ResponseWriter, r *http.Request) {
-	state, err := common.InitState(r)
-	if err != nil {
-		response.ErrorWhileInitializing(w, err)
-		return
-	}
-
-	type request struct {
-		Name      string
-		Structure json.RawMessage
-	}
-
-	// Parse request body
-	var req request
-	err = json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		response.BadRequest(w, errors.WrapMsg("CreateModule", response.ParseError, err))
-		return
-	}
-
-	exists, err := data.DoesModulePartWithNameExist(state, req.Name)
-	if err != nil {
-		response.InternalError(w, err)
-		return
-	}
-
-	if exists {
-		response.BadRequest(w, errors.ExistsError)
-		return
-	}
-
-	// Create processing channel
-	// TODO(selim): Is 500 correct for channel size?
-	initialNode := data.ModulePartNode{
-		Id:        0,
-		ValueType: 0,
-		ParentId:  sql.NullInt32{},
-		Name:      req.Name,
-		Value:     req.Structure,
-	}
-
-	data.InsertModulePartTree(state, &initialNode)
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Successfully created module part!")
 }
