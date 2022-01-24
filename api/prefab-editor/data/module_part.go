@@ -197,7 +197,9 @@ func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 }
 
 func GetRootModuleParts(state common.State) ([]RootModule, error) {
-	rows, err := state.Conn.Query(state.Context, `select id, name from "module_part" where parent_id is null and deleted_date is null`)
+	rows, err := state.Conn.Query(state.Context, `select id, name from "module_part" 
+		where parent_id is null and deleted_date is null 
+		order by name`)
 	if err != nil {
 		return nil, err
 	}
@@ -239,6 +241,14 @@ func DeleteModulePartTree(state common.State, id int) error {
 	return nil
 }
 
+func UpdateModulePart(state common.State, id int, node *ModulePartNode) error {
+	_, err := state.Conn.Exec(state.Context, `update module_part set is_array=$2, value_type=$3, tooltip=$4 where id=$1`, id, node.IsArray, node.ValueType, node.Tooltip)
+	if err != nil {
+		return e.Wrap("DeleteModulePartTree", err)
+	}
+	return nil
+}
+
 // Inserts a module part node with all of its children to database
 func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 	// Start transaction. If all modules can not be added successfully, don't
@@ -250,7 +260,6 @@ func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 	defer tx.Rollback(state.Context)
 	c := make(chan *ModulePartNode, 500)
 	c <- node
-	//	processedObjects := 0
 
 	// Process nodes in json object tree
 	for n := range c {
@@ -259,21 +268,16 @@ func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 		if err != nil {
 			return e.Wrap("InsertModulePartTree", err)
 		}
-		//		processedObjects++
 
 		// Check if current value is a json object
 		m := make(map[string]json.RawMessage, 20)
 		err = json.Unmarshal(n.Value, &m)
-		if err != nil {
+
+		if err != nil || m == nil {
 			// If there is no more elements to process, close the channel
 			if len(c) == 0 {
 				close(c)
 			}
-
-			// // If there is an error during json parsing for root node, exit early with error
-			// if processedObjects == 1 {
-			// 	return e.Wrap("InsertModulePartTree", err)
-			// }
 			continue
 		}
 
@@ -281,6 +285,7 @@ func InsertModulePartTree(state common.State, node *ModulePartNode) error {
 		for k := range m {
 			var pi ModulePartInfo
 			err = json.Unmarshal(m[k], &pi)
+
 			if err != nil {
 				return e.Wrap("InsertModulePartTree", err)
 			}

@@ -26,7 +26,6 @@ create table prefab_module_part (
 
     -- Value for the referenced field. Either numeric or string value is used
     -- depending on the type.
-    value_type         integer not null,
     value              json,
 
     prefab_id          integer not null,

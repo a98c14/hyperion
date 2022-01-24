@@ -97,7 +97,7 @@ func CreatePrefab(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if exists {
-		response.BadRequest(w, xerrors.ExistsError)
+		response.BadRequest(w, xerrors.ErrExists)
 		return
 	}
 

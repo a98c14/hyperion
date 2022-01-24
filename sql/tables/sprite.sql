@@ -3,6 +3,7 @@
 */
 create table sprite (
   id                 serial primary key,
+  asset_id           integer not null,
   texture_id         integer not null,
   unity_sprite_id    varchar(200) not null,
   unity_internal_id  varchar(200) not null,
@@ -13,5 +14,6 @@ create table sprite (
   unity_alignment    integer not null,
   created_date       timestamp default current_timestamp,
   unique (unity_sprite_id),
-  foreign key (texture_id) references texture(id)
+  foreign key (texture_id) references texture(id),
+  foreign key (asset_id) references asset(id)
 );

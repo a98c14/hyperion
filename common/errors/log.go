@@ -2,7 +2,7 @@ package errors
 
 import "fmt"
 
-// Wraps the given error with functiona name
+// Wraps the given error with function name
 func Wrap(fn string, err error) error {
 	return fmt.Errorf("%s\n-> %w", fn, err)
 }

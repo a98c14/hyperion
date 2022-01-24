@@ -88,10 +88,11 @@ func InsertPrefab(ctx context.Context, conn *pgxpool.Pool, name string, parentId
 
 // Returns prefabs that have no parent
 func GetRootPrefabs(state common.State) ([]RootPrefab, error) {
-	rows, err := state.Conn.Query(state.Context, `select id, name from prefab where parent_id is null`)
+	rows, err := state.Conn.Query(state.Context, `select p.id, a.name from prefab p inner join asset a on a.id=p.asset_id where parent_id is null`)
 	if err != nil {
 		return nil, xerrors.WrapMsg("GetRootPrefabs", "Query", err)
 	}
+	defer rows.Close()
 	prefabs := make([]RootPrefab, 0)
 	for rows.Next() {
 		prefab := RootPrefab{}
@@ -107,13 +108,17 @@ func GetRootPrefabs(state common.State) ([]RootPrefab, error) {
 func GetPrefabById(state common.State, prefabId int, balanceVersionId int) (*Prefab, error) {
 	// Fetch all prefabs that have given prefabId as root
 	rows, err := state.Conn.Query(state.Context, `with recursive prefab_recursive as (
-		select id, name, parent_id from prefab
-		where id=$1 and parent_id is null
-		union select c.id, c.name, c.parent_id from prefab c inner join prefab_recursive cp on cp.id=c.parent_id
+		select p.id, a.name, p.parent_id from prefab p
+			inner join asset a on a.id=p.asset_id
+			where id=$1 and parent_id is null
+		union select c.id, ca.name, c.parent_id from prefab c 
+			inner join asset ca on ca.id=c.asset_id 
+			inner join prefab_recursive cp on cp.id=c.parent_id
 	) select id, name, parent_id from prefab_recursive;`, prefabId)
 	if err != nil {
 		return nil, xerrors.Wrap("GetPrefabById", err)
 	}
+	defer rows.Close()
 
 	dbPrefabs := make([]*PrefabDB, 0)
 	for rows.Next() {

@@ -14,18 +14,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func GetTextures(w http.ResponseWriter, r *http.Request) {
+func GetTextures(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	conn, err := db.GetConnectionPool(ctx)
 	if err != nil {
-		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
-		return
+		return err
 	}
 
 	rows, err := conn.Query(ctx, "select id, unity_name from texture")
 	if err != nil {
-		http.Error(w, "Could not fetch textures,"+err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 
 	type textureResponse struct {
@@ -45,41 +43,41 @@ func GetTextures(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Json(w, &result)
+
+	return nil
 }
 
-func GetTextureFile(w http.ResponseWriter, r *http.Request) {
+func GetTextureFile(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	textureIdString := chi.URLParam(r, "textureId")
 	textureId, err := strconv.Atoi(textureIdString)
 	if err != nil {
-		http.Error(w, "Could not parse id value!", http.StatusBadRequest)
-		return
+		return err
 	}
 	conn, err := db.GetConnectionPool(ctx)
 	if err != nil {
-		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
-		return
+		return err
 	}
 
 	var imagePath string
 	err = conn.QueryRow(ctx, "select image_path from texture where id=$1", textureId).Scan(&imagePath)
 	if err != nil {
-		http.Error(w, "Could not fetch texture,"+err.Error(), http.StatusBadRequest)
-		return
+		return err
 	}
 
 	file, err := os.ReadFile(imagePath)
 	if err != nil {
-		http.Error(w, "Error while reading the file,"+err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(file)
+
+	return nil
 }
 
-func CreateTexture(w http.ResponseWriter, r *http.Request) {
+func CreateTexture(w http.ResponseWriter, r *http.Request) error {
 	type textureResponse struct {
 		Id int `json:"id"`
 	}
@@ -89,19 +87,16 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	unityGuid := r.FormValue("guid")
 
 	if unityName == "" {
-		response.BadRequest(w, errors.New("Texture name should not be empty!"))
-		return
+		return errors.New("texture name should not be empty")
 	}
 
 	if unityGuid == "" {
-		response.BadRequest(w, errors.New("Texture guid should not be empty!"))
-		return
+		return errors.New("texture guid should not be empty")
 	}
 
 	file, handler, err := r.FormFile("texture")
 	if err != nil {
-		response.BadRequest(w, errors.New("Could not read form file named texture"))
-		return
+		return errors.New("could not read form file named texture")
 	}
 	defer file.Close()
 
@@ -113,8 +108,7 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	conn, err := db.GetConnectionPool(ctx)
 	if err != nil {
-		http.Error(w, "Could not connect to database!", http.StatusInternalServerError)
-		return
+		return errors.New("could not connect to database")
 	}
 
 	// Check if texture with given name already existing
@@ -125,15 +119,14 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 			Id: existing,
 		}
 		response.Json(w, &resp)
-		return
+		return nil
 	}
 
 	// Create a temporary file within our temp-images directory that follows
 	// a particular naming pattern
 	tempFile, err := ioutil.TempFile(".\\textures", unityName+"-*.png")
 	if err != nil {
-		http.Error(w, "Error: "+err.Error(), http.StatusBadRequest)
-		return
+		return err
 	}
 	defer tempFile.Close()
 
@@ -149,8 +142,7 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	id, err := data.InsertTexture(ctx, conn, path, unityGuid, unityName)
 	if err != nil {
 		fmt.Println(err)
-		http.Error(w, "Could not insert texture to database, Error: "+err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 
 	resp := textureResponse{
@@ -158,4 +150,5 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Json(w, &resp)
+	return nil
 }

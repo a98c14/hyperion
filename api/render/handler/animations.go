@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -19,7 +18,8 @@ func GetAnimations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := state.Conn.Query(state.Context,
-		`select id, name, priority, transition_type from animation`)
+		`select a.id, asset.name, a.priority, a.transition_type from animation a
+		 inner join asset on asset.id=a.asset_id`)
 
 	if err != nil {
 		response.InternalError(w, err)
@@ -55,6 +55,7 @@ func GetAnimations(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w, err)
 		return
 	}
+	defer rows.Close()
 
 	var animationId int
 	var spriteId int
@@ -79,19 +80,17 @@ func GetAnimations(w http.ResponseWriter, r *http.Request) {
 	response.Json(w, animations)
 }
 
-func GenerateAnimationsFromSprites(w http.ResponseWriter, r *http.Request) {
+func GenerateAnimationsFromSprites(w http.ResponseWriter, r *http.Request) error {
 	state, err := common.InitState(r)
 	if err != nil {
-		response.ErrorWhileInitializing(w, err)
-		return
+		return err
 	}
 	conn := state.Conn
 	ctx := state.Context
 
 	rows, err := conn.Query(ctx, `select id, unity_name from sprite`)
 	if err != nil {
-		http.Error(w, "Could not fetch sprites from database. "+err.Error(), http.StatusInternalServerError)
-		return
+		return err
 	}
 	defer rows.Close()
 
@@ -101,8 +100,7 @@ func GenerateAnimationsFromSprites(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		err := rows.Scan(&id, &unityName)
 		if err != nil {
-			http.Error(w, "Could not read sprite row."+err.Error(), http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		unityName = strings.Replace(unityName, " ", "_", -1)
@@ -131,7 +129,9 @@ func GenerateAnimationsFromSprites(w http.ResponseWriter, r *http.Request) {
 	for _, a := range animationMap {
 		err = data.CreateAnimation(state, a)
 		if err != nil {
-			fmt.Println("Error while creating animation" + err.Error())
+			return err
 		}
 	}
+
+	return nil
 }

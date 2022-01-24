@@ -5,11 +5,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/a98c14/hyperion/api/asset"
 	prefab "github.com/a98c14/hyperion/api/prefab-editor/handler"
 	render "github.com/a98c14/hyperion/api/render/handler"
 	"github.com/a98c14/hyperion/api/versioning/handler"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 func HandleCors(next http.Handler) http.Handler {
@@ -29,8 +31,14 @@ func LogRequest(next http.Handler) http.Handler {
 
 func New() *chi.Mux {
 	r := chi.NewRouter()
+	// Setup middlewares
 	r.Use(HandleCors)
-	r.Use(LogRequest)
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	// r.Use(LogRequest)
+
 	// Versions
 	r.Route("/versions", func(r chi.Router) {
 		r.Get("/", handler.ListVersions)
@@ -39,10 +47,10 @@ func New() *chi.Mux {
 
 	// Components
 	r.Route("/modules", func(r chi.Router) {
-		r.Post("/", prefab.SyncModule)
+		r.Method("POST", "/", Handler(prefab.SyncModule))
 		r.Delete("/", prefab.DeleteModule)
-		r.Get("/{moduleId}", prefab.GetModuleById)
-		r.Get("/", prefab.GetRootModules)
+		r.Method("GET", "/{moduleId}", Handler(prefab.GetModuleById))
+		r.Method("GET", "/", Handler(prefab.GetRootModules))
 	})
 
 	// Prefabs
@@ -55,21 +63,26 @@ func New() *chi.Mux {
 
 	// Textures
 	r.Route("/textures", func(r chi.Router) {
-		r.Post("/", render.CreateTexture)
-		r.Get("/", render.GetTextures)
-		r.Get("/{textureId}", render.GetTextureFile)
+		r.Method("POST", "/", Handler(render.CreateTexture))
+		r.Method("GET", "/", Handler(render.GetTextures))
+		r.Method("GET", "/{textureId}", Handler(render.GetTextureFile))
 	})
 
 	// Sprites
 	r.Route("/sprites", func(r chi.Router) {
-		r.Post("/", render.CreateSprites)
-		r.Get("/", render.GetSprites)
+		r.Method("POST", "/", Handler(render.CreateSprites))
+		r.Method("GET", "/", Handler(render.GetSprites))
 	})
 
 	// Animations
 	r.Route("/animations", func(r chi.Router) {
 		r.Get("/", render.GetAnimations)
-		r.Post("/generate", render.GenerateAnimationsFromSprites)
+		r.Method("POST", "/generate", Handler(render.GenerateAnimationsFromSprites))
+	})
+
+	r.Route("/assets", func(r chi.Router) {
+		r.Method("GET", "/", Handler(asset.GetAssets))
+		r.Method("POST", "/", Handler(asset.SyncAssets))
 	})
 
 	return r
