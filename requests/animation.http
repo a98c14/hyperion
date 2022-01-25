@@ -1,2 +1,2 @@
 
-GET http://localhost:8000/animations HTTP/1.1
+GET http://159.89.15.128/animations HTTP/1.1
