@@ -1,4 +1,4 @@
-GET http://localhost:8000/prefabs HTTP/1.1
+GET http://159.89.15.128/prefabs HTTP/1.1
 
 ###
 

@@ -85,5 +85,12 @@ func New() *chi.Mux {
 		r.Method("POST", "/", Handler(asset.SyncAssets))
 	})
 
+	r.Route("/health", func(r chi.Router) {
+		r.Get("/status", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "It's ok 😊")
+			w.WriteHeader(http.StatusOK)
+		})
+	})
+
 	return r
 }
