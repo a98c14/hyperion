@@ -91,7 +91,7 @@ func New() *chi.Mux {
 			w.WriteHeader(http.StatusOK)
 		})
 		r.Get("/test", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "Is it working? 🤔")
+			fmt.Fprintf(w, "Last test. 🤔")
 			w.WriteHeader(http.StatusOK)
 		})
 	})
