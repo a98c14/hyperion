@@ -16,3 +16,11 @@ func Json(w http.ResponseWriter, body interface{}) {
 		InternalError(w, err)
 	}
 }
+
+func Success(w http.ResponseWriter, message string) {
+	w.WriteHeader(http.StatusOK)
+	err := json.Encode(w, struct{ Message string }{Message: message})
+	if err != nil {
+		InternalError(w, err)
+	}
+}

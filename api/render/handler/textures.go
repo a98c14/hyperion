@@ -9,19 +9,13 @@ import (
 	"strconv"
 
 	"github.com/a98c14/hyperion/api/render/data"
+	"github.com/a98c14/hyperion/common"
 	"github.com/a98c14/hyperion/common/response"
-	"github.com/a98c14/hyperion/db"
 	"github.com/go-chi/chi/v5"
 )
 
-func GetTextures(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	conn, err := db.GetConnectionPool(ctx)
-	if err != nil {
-		return err
-	}
-
-	rows, err := conn.Query(ctx, "select id, unity_name from texture")
+func GetTextures(state common.State, w http.ResponseWriter, r *http.Request) error {
+	rows, err := state.Conn.Query(state.Context, "select id, unity_name from texture")
 	if err != nil {
 		return err
 	}
@@ -47,21 +41,15 @@ func GetTextures(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func GetTextureFile(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-
+func GetTextureFile(state common.State, w http.ResponseWriter, r *http.Request) error {
 	textureIdString := chi.URLParam(r, "textureId")
 	textureId, err := strconv.Atoi(textureIdString)
 	if err != nil {
 		return err
 	}
-	conn, err := db.GetConnectionPool(ctx)
-	if err != nil {
-		return err
-	}
 
 	var imagePath string
-	err = conn.QueryRow(ctx, "select image_path from texture where id=$1", textureId).Scan(&imagePath)
+	err = state.Conn.QueryRow(state.Context, "select image_path from texture where id=$1", textureId).Scan(&imagePath)
 	if err != nil {
 		return err
 	}
@@ -77,7 +65,7 @@ func GetTextureFile(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func CreateTexture(w http.ResponseWriter, r *http.Request) error {
+func CreateTexture(state common.State, w http.ResponseWriter, r *http.Request) error {
 	type textureResponse struct {
 		Id int `json:"id"`
 	}
@@ -104,16 +92,9 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) error {
 	fmt.Printf("File Size: %+v\n", handler.Size)
 	fmt.Printf("MIME Header: %+v\n", handler.Header)
 
-	// Connect to database
-	ctx := r.Context()
-	conn, err := db.GetConnectionPool(ctx)
-	if err != nil {
-		return errors.New("could not connect to database")
-	}
-
 	// Check if texture with given name already existing
 	var existing int
-	conn.QueryRow(ctx, "select id from texture where unity_name=$1 limit 1", unityName).Scan(&existing)
+	state.Conn.QueryRow(state.Context, "select id from texture where unity_name=$1 limit 1", unityName).Scan(&existing)
 	if existing != 0 {
 		resp := textureResponse{
 			Id: existing,
@@ -139,7 +120,7 @@ func CreateTexture(w http.ResponseWriter, r *http.Request) error {
 	tempFile.Write(fileBytes)
 	path := tempFile.Name()
 
-	id, err := data.InsertTexture(ctx, conn, path, unityGuid, unityName)
+	id, err := data.InsertTexture(state, path, unityGuid, unityName)
 	if err != nil {
 		fmt.Println(err)
 		return err

@@ -12,11 +12,7 @@ import (
 	"github.com/jackc/pgx/v4"
 )
 
-func GetSprites(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
-	if err != nil {
-		return err
-	}
+func GetSprites(state common.State, w http.ResponseWriter, r *http.Request) error {
 	rows, err := state.Conn.Query(state.Context,
 		`select id, texture_id, unity_name, unity_pivot, 
 				unity_rect, unity_border, unity_alignment
@@ -55,23 +51,17 @@ func GetSprites(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func CreateSprites(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
-	if err != nil {
-		return err
-	}
-
+func CreateSprites(state common.State, w http.ResponseWriter, r *http.Request) error {
 	ctx := state.Context
 	conn := state.Conn
 
-	type reqData struct {
+	// Parse request body
+	req := struct {
 		TextureId int
 		Sprites   []data.Sprite
-	}
+	}{}
 
-	// Parse request body
-	var req reqData
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return err
 	}

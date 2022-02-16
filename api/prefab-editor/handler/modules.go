@@ -16,12 +16,7 @@ import (
 /* Gets the base module_part and all of its children by id.
 Can only query base components. Nodes that have null as children
 represent leaf nodes */
-func GetModuleById(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
-	if err != nil {
-		return err
-	}
-
+func GetModuleById(state common.State, w http.ResponseWriter, r *http.Request) error {
 	// Load components that have given name from database
 	moduleIdString := chi.URLParam(r, "moduleId")
 	moduleId, err := strconv.Atoi(moduleIdString)
@@ -34,25 +29,25 @@ func GetModuleById(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	type modulePartResp struct {
-		Id        int               `json:"id"`
-		Name      string            `json:"name"`
-		ValueType int               `json:"valueType"`
-		Children  []*modulePartResp `json:"children"`
+	type modulePart struct {
+		Id        int           `json:"id"`
+		Name      string        `json:"name"`
+		ValueType int           `json:"valueType"`
+		Children  []*modulePart `json:"children"`
 	}
 
 	/* Create object tree from module part list. Components are always ordered from root to child*/
-	root := modulePartResp{
+	root := modulePart{
 		Id:        moduleParts[0].Id,
 		Name:      moduleParts[0].Name,
 		ValueType: moduleParts[0].ValueType,
-		Children:  make([]*modulePartResp, 0),
+		Children:  make([]*modulePart, 0),
 	}
-	nodeMap := make(map[int]*modulePartResp)
+	nodeMap := make(map[int]*modulePart)
 	nodeMap[root.Id] = &root
 	for _, c := range moduleParts[1:] {
 		if val, ok := nodeMap[c.ParentId]; ok {
-			cr := modulePartResp{
+			cr := modulePart{
 				Id:        c.Id,
 				Name:      c.Name,
 				ValueType: c.ValueType,
@@ -76,12 +71,7 @@ func ListComponents(w http.ResponseWriter, r *http.Request) {
 // Returns all the root components.
 // Root components are module_part that have no parent. Used to group
 // other components and editor can only filter using root components
-func GetRootModules(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
-	if err != nil {
-		return err
-	}
-
+func GetRootModules(state common.State, w http.ResponseWriter, r *http.Request) error {
 	components, err := data.GetRootModuleParts(state)
 	if err != nil {
 		return err
@@ -97,21 +87,15 @@ func DeleteModule(w http.ResponseWriter, r *http.Request) {
 
 // Add module if it doesn't exist, update module if it does
 // if there is no difference do nothing
-func SyncModule(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
-	if err != nil {
-		return err
-	}
-
+func SyncModule(state common.State, w http.ResponseWriter, r *http.Request) error {
 	// Parse request
 	// TODO(selim): Add former name field to request.
-	type request struct {
+	req := struct {
 		Name      string
 		Structure json.RawMessage
-	}
-	var req request
+	}{}
 
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return err
 	}

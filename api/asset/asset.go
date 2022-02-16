@@ -36,8 +36,19 @@ const (
 	Sprite                      = 5
 	Texture                     = 6
 	Animation                   = 7
+	Prefab                      = 8
 )
 
+func DbGetAssetName(state common.State, id int32) (string, error) {
+	var name string
+	err := state.Conn.QueryRow(state.Context, `select name from asset where id=$1`, id).Scan(&name)
+	if err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// TODO(selim): Add paging
 func DbGetAssets(state common.State, assetType AssetType) ([]AssetDb, error) {
 	rows, err := state.Conn.Query(state.Context, `select id, name from asset where type=$1 and deleted_date is null`, assetType)
 	if err != nil {

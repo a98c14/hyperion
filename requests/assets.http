@@ -1,0 +1,5 @@
+GET http://localhost:8000/assets?assetType=7 HTTP/1.1
+
+###
+
+GET http://localhost:8000/assets/3396 HTTP/1.1

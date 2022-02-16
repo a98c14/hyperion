@@ -1,16 +1,15 @@
 package data
 
 import (
-	"context"
 	"database/sql"
 
 	"github.com/a98c14/hyperion/api/asset"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/a98c14/hyperion/common"
 )
 
-func InsertTexture(ctx context.Context, conn *pgxpool.Pool, path string, guid string, name string) (sql.NullInt32, error) {
+func InsertTexture(state common.State, path string, guid string, name string) (sql.NullInt32, error) {
 	var id sql.NullInt32
-	err := conn.QueryRow(ctx,
+	err := state.Conn.QueryRow(state.Context,
 		`
 		with ins as (
 			insert into asset (name, unity_guid, type)

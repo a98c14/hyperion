@@ -55,8 +55,8 @@ func New() *chi.Mux {
 
 	// Prefabs
 	r.Route("/prefabs", func(r chi.Router) {
-		r.Post("/", prefab.CreatePrefab)
-		r.Get("/", prefab.ListPrefabs)
+		r.Method("POST", "/", Handler(prefab.CreatePrefab))
+		r.Method("GET", "/", Handler(prefab.ListPrefabs))
 		r.Get("/{prefabId}", prefab.GetPrefabById)
 		r.Get("/{prefabId}/versions/{versionId}", prefab.GetPrefabById)
 	})
@@ -82,6 +82,7 @@ func New() *chi.Mux {
 
 	r.Route("/assets", func(r chi.Router) {
 		r.Method("GET", "/", Handler(asset.GetAssets))
+		r.Method("GET", "/{assetId}", Handler(asset.GetAssetName))
 		r.Method("POST", "/", Handler(asset.SyncAssets))
 	})
 

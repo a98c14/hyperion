@@ -80,11 +80,7 @@ func GetAnimations(w http.ResponseWriter, r *http.Request) {
 	response.Json(w, animations)
 }
 
-func GenerateAnimationsFromSprites(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
-	if err != nil {
-		return err
-	}
+func GenerateAnimationsFromSprites(state common.State, w http.ResponseWriter, r *http.Request) error {
 	conn := state.Conn
 	ctx := state.Context
 

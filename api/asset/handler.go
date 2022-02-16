@@ -11,13 +11,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func GetAssets(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
-	if err != nil {
-		return err
+func GetAssets(state common.State, w http.ResponseWriter, r *http.Request) error {
+	assetTypeString := r.URL.Query().Get("assetType")
+	if assetTypeString == "" {
+		return errors.ErrBadRequest
 	}
 
-	assetTypeString := chi.URLParam(r, "assetType")
 	assetType, err := strconv.Atoi(assetTypeString)
 	if err != nil {
 		return errors.ErrNotFound
@@ -32,35 +31,45 @@ func GetAssets(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func SyncAssets(w http.ResponseWriter, r *http.Request) error {
-	state, err := common.InitState(r)
+func GetAssetName(state common.State, w http.ResponseWriter, r *http.Request) error {
+	assetIdString := chi.URLParam(r, "assetId")
+	assetId, err := strconv.Atoi(assetIdString)
+	if err != nil {
+		return errors.ErrNotFound
+	}
+
+	resp := struct {
+		Name string `json:"name"`
+	}{}
+	resp.Name, err = DbGetAssetName(state, int32(assetId))
 	if err != nil {
 		return err
 	}
 
-	// Parse request
-	type reqModel struct {
+	response.Json(w, &resp)
+	return nil
+}
+
+func SyncAssets(state common.State, w http.ResponseWriter, r *http.Request) error {
+	req := struct {
 		Type   AssetType
 		Assets []AssetUnity
-	}
+	}{}
 
-	var req reqModel
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		return err
 	}
 
 	resp := make([]AssetDb, len(req.Assets))
 	for _, asset := range req.Assets {
-		// TODO(selim): Get asset id if it exists
-		var id int32
 		id, err := DbSyncAsset(state, req.Type, &asset)
 		if err != nil {
 			return err
 		}
 		resp = append(resp, AssetDb{
 			Id:        id,
-			UnityGuid: "t",
+			UnityGuid: asset.Guid,
 			Name:      asset.Name,
 			Type:      req.Type,
 		})

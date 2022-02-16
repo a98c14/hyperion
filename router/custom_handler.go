@@ -5,17 +5,28 @@ import (
 	"reflect"
 	"runtime"
 
+	"github.com/a98c14/hyperion/common"
 	"github.com/a98c14/hyperion/common/errors"
 	"github.com/a98c14/hyperion/common/response"
 )
 
-type Handler func(w http.ResponseWriter, r *http.Request) error
+type Handler func(state common.State, w http.ResponseWriter, r *http.Request) error
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// TODO(selim): Add response based on type
-	if err := h(w, r); err != nil {
-		name := runtime.FuncForPC(reflect.ValueOf(h).Pointer()).Name()
-		response.InternalError(w, errors.Wrap(name, err))
+	state, err := common.InitState(r)
+	if err != nil {
+		response.ErrorWhileInitializing(w, err)
 		return
+	}
+
+	if err := h(state, w, r); err != nil {
+		switch err {
+		case errors.ErrExists:
+			response.BadRequest(w, err)
+		default:
+			name := runtime.FuncForPC(reflect.ValueOf(h).Pointer()).Name()
+			response.InternalError(w, errors.Wrap(name, err))
+			return
+		}
 	}
 }

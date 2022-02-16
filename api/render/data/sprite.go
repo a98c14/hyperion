@@ -29,7 +29,7 @@ func InsertSpriteIfNotExists(ctx context.Context, batch *pgx.Batch, textureId in
 		)
 		insert into "sprite"
 		(texture_id, unity_sprite_id, unity_internal_id, unity_name, unity_pivot, unity_rect, unity_border, unity_alignment, asset_id)
-		 values($1, $2, $3, $4, $5, $6, $7, $8, )
+		 values($1, $2, $3, $4, $5, $6, $7, $8, (select id from ins))
 		 on conflict do nothing`,
 		textureId,
 		sprite.SpriteId,

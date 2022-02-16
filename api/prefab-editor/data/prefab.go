@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"github.com/a98c14/hyperion/api/asset"
 	"github.com/a98c14/hyperion/common"
 	xerrors "github.com/a98c14/hyperion/common/errors"
 	"github.com/a98c14/hyperion/common/querystr"
@@ -27,22 +28,76 @@ type PrefabModuleValueDB struct {
 	Value        json.RawMessage
 }
 
+type ColliderType int32
+
+const (
+	UndefinedCollider  ColliderType = 0
+	RectColliderType   ColliderType = 1
+	CircleColliderType ColliderType = 2
+)
+
+type Vec2 struct {
+	X float32
+	Y float32
+}
+type Vec3 struct {
+	X float32
+	Y float32
+}
+
+// TODO(selim): Add missing fields
+type Renderer struct {
+	IsVisible bool
+}
+
+type Transform struct {
+	Position Vec3
+	Scale    Vec2
+	Rotation float32
+}
+
+// TODO(selim): Add tags
+type CircleCollider struct {
+	Center Vec2
+	Radius float32
+}
+
+// TODO(selim): Add tags
+type RectCollider struct {
+	BL Vec2
+	TR Vec2
+}
+
+// Data gets parsed accordin to the type
+type Collider struct {
+	Type ColliderType
+	Data json.RawMessage
+}
+
 type ByIdPValue []PrefabModuleValueDB
 
 func (b ByIdPValue) Id(i int) int { return b[i].Id }
 func (b ByIdPValue) Len() int     { return len(b) }
 
 type Prefab struct {
-	Id       int                 `json:"id"`
-	Name     string              `json:"name"`
-	ParentId int                 `json:"parentId"`
-	Modules  []*PrefabModulePart `json:"modules"`
+	Id        int                 `json:"id"`
+	Name      string              `json:"name"`
+	ParentId  int                 `json:"parentId"`
+	Transform json.RawMessage     `json:"transform"`
+	Renderer  json.RawMessage     `json:"renderer"`
+	Colliders json.RawMessage     `json:"colliders"`
+	Modules   []*PrefabModulePart `json:"modules"`
 }
 
 type PrefabDB struct {
 	Id       int
 	Name     string
 	ParentId sql.NullInt32
+
+	// Stored as json values in database
+	Transform json.RawMessage
+	Renderer  json.RawMessage
+	Colliders json.RawMessage
 }
 
 type RootPrefab struct {
@@ -66,20 +121,36 @@ func (b ById) Len() int     { return len(b) }
 
 func DoesNameExist(ctx context.Context, conn *pgxpool.Pool, name string) (bool, error) {
 	var exists bool
-	err := conn.QueryRow(ctx, "select exists(select 1 from prefab where name=$1)", name).Scan(&exists)
+	err := conn.QueryRow(ctx, "select exists(select 1 from prefab p inner join asset a on p.asset_id=a.id where a.name=$1)", name).Scan(&exists)
 	if err != nil {
 		return false, xerrors.Wrap("DoesNameExist", err)
 	}
 	return exists, nil
 }
 
-func InsertPrefab(ctx context.Context, conn *pgxpool.Pool, name string, parentId sql.NullInt32) (sql.NullInt32, error) {
+func DoesIdExist(ctx context.Context, conn *pgxpool.Pool, id int) (bool, error) {
+	var exists bool
+	err := conn.QueryRow(ctx, "select exists(select 1 from prefab where id=$1)", id).Scan(&exists)
+	if err != nil {
+		return false, xerrors.Wrap("DoesNameExist", err)
+	}
+	return exists, nil
+}
+
+func InsertPrefab(ctx context.Context, conn *pgxpool.Pool, name string, parentId sql.NullInt32, transform json.RawMessage, renderer json.RawMessage, colliders json.RawMessage) (sql.NullInt32, error) {
 	var id sql.NullInt32
+
 	err := conn.QueryRow(ctx,
-		`insert into "prefab" 
-		 (name, parent_id) 
-		 values($1, $2) returning id`,
-		name, parentId).Scan(&id)
+		`
+		with ins as (
+			insert into asset (name, unity_guid, type)
+			select $1, '-', $3
+			returning id
+		)
+		insert into "prefab" 
+		(asset_id, parent_id, transform, renderer, colliders) 
+		values((select id from ins), $2, $4, $5, $6) returning id`,
+		name, parentId, asset.Prefab, transform, renderer, colliders).Scan(&id)
 	if err != nil {
 		return sql.NullInt32{}, xerrors.Wrap("InsertPrefab", err)
 	}
@@ -110,7 +181,7 @@ func GetPrefabById(state common.State, prefabId int, balanceVersionId int) (*Pre
 	rows, err := state.Conn.Query(state.Context, `with recursive prefab_recursive as (
 		select p.id, a.name, p.parent_id from prefab p
 			inner join asset a on a.id=p.asset_id
-			where id=$1 and parent_id is null
+			where p.id=$1 and parent_id is null
 		union select c.id, ca.name, c.parent_id from prefab c 
 			inner join asset ca on ca.id=c.asset_id 
 			inner join prefab_recursive cp on cp.id=c.parent_id
@@ -143,7 +214,11 @@ func GetPrefabById(state common.State, prefabId int, balanceVersionId int) (*Pre
 	}
 
 	// TODO(selim): Child prefabs should be inside the original prefab as children
-	return prefabs[0], nil
+	if len(prefabs) > 0 {
+		return prefabs[0], nil
+	} else {
+		return nil, xerrors.ErrNotFound
+	}
 }
 
 func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB) (*Prefab, error) {
@@ -161,7 +236,7 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 	// Load prefab module part values. These are the actual values entered from
 	// editor app.
 	rows, err := state.Conn.Query(state.Context,
-		`select module_part.id, array_index, module_part_id, module_part.
+		`select prefab_module_part.id, array_index, module_part_id, module_part.
 		value_type, value, prefab_id
 		from prefab_module_part 
 		inner join module_part on module_part.id = prefab_module_part.module_part_id
@@ -188,8 +263,8 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 	// Load prefab module trees.
 	instr, params := querystr.GenerateInStringIdentifiable(ByIdPValue(prefabModuleValues))
 	rows, err = state.Conn.Query(state.Context, `with recursive module_part_recursive as (
-			select id, name, value_type, parent_id from module_part 
-			where id in (`+instr+`)
+			select module_part.id, name, value_type, parent_id from module_part 
+			where module_part.id in (`+instr+`)
 			union select mp.id, mp.name, mp.value_type, mp.parent_id from module_part mp 
 			inner join module_part_recursive mpr on mp.id=mpr.parent_id
 		) select id, name, value_type, parent_id from module_part_recursive;`, params...)
