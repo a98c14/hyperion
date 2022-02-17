@@ -87,6 +87,7 @@ type Prefab struct {
 	Renderer  json.RawMessage     `json:"renderer"`
 	Colliders json.RawMessage     `json:"colliders"`
 	Modules   []*PrefabModulePart `json:"modules"`
+	Children  []*Prefab           `json:"children"`
 }
 
 type PrefabDB struct {
@@ -185,7 +186,8 @@ func GetPrefabById(state common.State, prefabId int, balanceVersionId int) (*Pre
 		union select c.id, ca.name, c.parent_id from prefab c 
 			inner join asset ca on ca.id=c.asset_id 
 			inner join prefab_recursive cp on cp.id=c.parent_id
-	) select id, name, parent_id from prefab_recursive;`, prefabId)
+	) select pr.id, pr.name, pr.parent_id, p.transform, p.renderer, p.colliders from prefab_recursive pr 
+	  inner join prefab p on pr.id=p.id;`, prefabId)
 	if err != nil {
 		return nil, xerrors.Wrap("GetPrefabById", err)
 	}
@@ -194,7 +196,7 @@ func GetPrefabById(state common.State, prefabId int, balanceVersionId int) (*Pre
 	dbPrefabs := make([]*PrefabDB, 0)
 	for rows.Next() {
 		prefab := PrefabDB{}
-		err = rows.Scan(&prefab.Id, &prefab.Name, &prefab.ParentId)
+		err = rows.Scan(&prefab.Id, &prefab.Name, &prefab.ParentId, &prefab.Transform, &prefab.Renderer, &prefab.Colliders)
 		if err != nil {
 			return nil, xerrors.Wrap("GetPrefabById", err)
 		}
@@ -204,18 +206,25 @@ func GetPrefabById(state common.State, prefabId int, balanceVersionId int) (*Pre
 	defer rows.Close()
 
 	// For each prefab, get the module tree and values
-	prefabs := make([]*Prefab, 0, len(dbPrefabs))
+	prefabMap := make(map[int]*Prefab, 0)
+	var rootId int
 	for _, dbPrefab := range dbPrefabs {
 		prefab, err := getPrefabDetails(state, balanceVersionId, dbPrefab)
 		if err != nil {
 			return nil, xerrors.Wrap("GetPrefabById", err)
 		}
-		prefabs = append(prefabs, prefab)
+
+		prefabMap[prefab.Id] = prefab
+		if prefab.ParentId != 0 {
+			parent := prefabMap[prefab.ParentId]
+			parent.Children = append(parent.Children, prefab)
+		} else {
+			rootId = prefab.Id
+		}
 	}
 
-	// TODO(selim): Child prefabs should be inside the original prefab as children
-	if len(prefabs) > 0 {
-		return prefabs[0], nil
+	if rootId > 0 {
+		return prefabMap[rootId], nil
 	} else {
 		return nil, xerrors.ErrNotFound
 	}
@@ -227,10 +236,14 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 		parentId = int(prefab.ParentId.Int32)
 	}
 	result := Prefab{
-		Id:       prefab.Id,
-		ParentId: parentId,
-		Name:     prefab.Name,
-		Modules:  make([]*PrefabModulePart, 0),
+		Id:        prefab.Id,
+		ParentId:  parentId,
+		Name:      prefab.Name,
+		Transform: prefab.Transform,
+		Renderer:  prefab.Renderer,
+		Colliders: prefab.Colliders,
+		Modules:   make([]*PrefabModulePart, 0),
+		Children:  make([]*Prefab, 0),
 	}
 
 	// Load prefab module part values. These are the actual values entered from
