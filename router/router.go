@@ -55,8 +55,10 @@ func New() *chi.Mux {
 
 	// Prefabs
 	r.Route("/prefabs", func(r chi.Router) {
+		r.Method("PUT", "/", Handler(prefab.UpdatePrefab))
 		r.Method("POST", "/", Handler(prefab.CreatePrefab))
 		r.Method("GET", "/", Handler(prefab.ListPrefabs))
+		r.Method("DELETE", "/{prefabId}", Handler(prefab.DeletePrefab))
 		r.Get("/{prefabId}", prefab.GetPrefabById)
 		r.Get("/{prefabId}/versions/{versionId}", prefab.GetPrefabById)
 	})

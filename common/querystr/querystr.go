@@ -32,13 +32,13 @@ func GetIntArray(values Identifiable) []int {
 // Example:
 // str -> $1, $2, $3
 // arr -> 4, 6, 7
-func GenerateInStringIdentifiable(values Identifiable) (string, []interface{}) {
+func GenerateInStringIdentifiable(values Identifiable, offset int) (string, []interface{}) {
 	str := ""
 	arr := make([]interface{}, values.Len())
 	for i := 0; i < values.Len(); i++ {
 		v := values.Id(i)
 		arr[i] = v
-		str += "$" + strconv.Itoa(i+1) + ","
+		str += "$" + strconv.Itoa(i+1+offset) + ","
 	}
 	str = str[:len(str)-1] // Remove last `,`
 	return str, arr

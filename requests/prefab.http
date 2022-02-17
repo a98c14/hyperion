@@ -1,8 +1,103 @@
-GET http://159.89.15.128/prefabs HTTP/1.1
+GET http://localhost:8000/prefabs HTTP/1.1
 
 ###
 
-GET http://localhost:8000/prefabs/17 HTTP/1.1
+GET http://localhost:8000/prefabs/20 HTTP/1.1
+
+###
+
+DELETE http://localhost:8000/prefabs/19 HTTP/1.1
+
+###
+
+PUT http://localhost:8000/prefabs HTTP/1.1
+content-type: application/json
+
+{
+    "id": 20,
+    "name": "Enemy Boar 13",
+    "transform": {
+        "position": {
+            "x": 2,
+            "y": 0,
+            "z": 0
+        },
+        "scale": {
+            "x": 1,
+            "y": 1
+        },
+        "rotation": 0
+    },
+    "renderer": {
+        "isVisible": true
+    },
+    "colliders": [],
+    "modules": [
+        {
+            "arrayIndex": 0,
+            "modulePartId": 125,
+            "value": false
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 286
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 273
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 291
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 280
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 184,
+            "value": "123"
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 219,
+            "value": "15"
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 264,
+            "value": "623"
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 239,
+            "value": 0
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 252,
+            "value": 0
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 86,
+            "value": 83
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 157,
+            "value": 155
+        },
+        {
+            "arrayIndex": 0,
+            "modulePartId": 114,
+            "value": 204
+        }
+    ],
+    "children": []
+}
+
 
 ###
 

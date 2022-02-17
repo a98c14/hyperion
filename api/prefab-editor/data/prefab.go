@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"github.com/a98c14/hyperion/api/asset"
 	"github.com/a98c14/hyperion/common"
@@ -76,7 +77,7 @@ type Collider struct {
 
 type ByIdPValue []PrefabModuleValueDB
 
-func (b ByIdPValue) Id(i int) int { return b[i].Id }
+func (b ByIdPValue) Id(i int) int { return b[i].ModulePartId }
 func (b ByIdPValue) Len() int     { return len(b) }
 
 type Prefab struct {
@@ -138,6 +139,47 @@ func DoesIdExist(ctx context.Context, conn *pgxpool.Pool, id int) (bool, error) 
 	return exists, nil
 }
 
+func UpdatePrefab(state common.State, prefabId int, name string, parentId sql.NullInt32, transform json.RawMessage, renderer json.RawMessage, colliders json.RawMessage) error {
+	_, err := state.Conn.Exec(state.Context,
+		`
+		update asset
+		set name=$2
+		where id=(select asset_id from prefab where id=$1);
+		`, prefabId, name)
+	if err != nil {
+		return xerrors.Wrap("InsertPrefab", err)
+	}
+
+	if parentId.Valid {
+		_, err = state.Conn.Exec(state.Context,
+			`
+				update prefab
+				set parent_id=$2,
+					transform=$3,
+					renderer=$4,
+					colliders=$5
+				where id=$1;
+				`, prefabId, parentId, transform, renderer, colliders)
+		if err != nil {
+			return xerrors.Wrap("InsertPrefab", err)
+		}
+	} else {
+		fmt.Println(colliders)
+		_, err = state.Conn.Exec(state.Context,
+			`
+				update prefab
+				set transform=$2,
+					renderer=$3,
+					colliders=$4
+				where id=$1 and parent_id is null;
+				`, prefabId, string(transform), string(renderer), string(colliders))
+		if err != nil {
+			return xerrors.Wrap("InsertPrefab", err)
+		}
+	}
+	return nil
+}
+
 func InsertPrefab(ctx context.Context, conn *pgxpool.Pool, name string, parentId sql.NullInt32, transform json.RawMessage, renderer json.RawMessage, colliders json.RawMessage) (sql.NullInt32, error) {
 	var id sql.NullInt32
 
@@ -156,6 +198,36 @@ func InsertPrefab(ctx context.Context, conn *pgxpool.Pool, name string, parentId
 		return sql.NullInt32{}, xerrors.Wrap("InsertPrefab", err)
 	}
 	return id, nil
+}
+
+func DeletePrefab(state common.State, prefabId int) error {
+	_, err := state.Conn.Exec(state.Context, `
+		with recursive prefab_recursive as (
+			select p.id, a.name, p.parent_id from prefab p
+				inner join asset a on a.id=p.asset_id
+				where p.id=$1 and parent_id is null
+			union select c.id, ca.name, c.parent_id from prefab c 
+				inner join asset ca on ca.id=c.asset_id 
+				inner join prefab_recursive cp on cp.id=c.parent_id
+		) 
+		delete from prefab_module_part where prefab_id in (select id from prefab_recursive);`, prefabId)
+	if err != nil {
+		return err
+	}
+	_, err = state.Conn.Exec(state.Context, `
+		with recursive prefab_recursive as (
+			select p.id, a.name, p.parent_id from prefab p
+				inner join asset a on a.id=p.asset_id
+				where p.id=$1 and parent_id is null
+			union select c.id, ca.name, c.parent_id from prefab c 
+				inner join asset ca on ca.id=c.asset_id 
+				inner join prefab_recursive cp on cp.id=c.parent_id
+		) 
+		delete from prefab where id in (select id from prefab_recursive);`, prefabId)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Returns prefabs that have no parent
@@ -249,10 +321,9 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 	// Load prefab module part values. These are the actual values entered from
 	// editor app.
 	rows, err := state.Conn.Query(state.Context,
-		`select prefab_module_part.id, array_index, module_part_id, module_part.
-		value_type, value, prefab_id
-		from prefab_module_part 
-		inner join module_part on module_part.id = prefab_module_part.module_part_id
+		`select pmp.id, pmp.array_index, pmp.module_part_id, mp.value_type, pmp.value, pmp.prefab_id
+		from prefab_module_part pmp
+		inner join module_part mp on mp.id = pmp.module_part_id
 		where balance_version_id=$1 and prefab_id=$2`, balanceVersionId, prefab.Id)
 	if err != nil {
 		return nil, xerrors.Wrap("getPrefabDetails", err)
@@ -274,7 +345,7 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 	}
 
 	// Load prefab module trees.
-	instr, params := querystr.GenerateInStringIdentifiable(ByIdPValue(prefabModuleValues))
+	instr, params := querystr.GenerateInStringIdentifiable(ByIdPValue(prefabModuleValues), 0)
 	rows, err = state.Conn.Query(state.Context, `with recursive module_part_recursive as (
 			select module_part.id, name, value_type, parent_id from module_part 
 			where module_part.id in (`+instr+`)
@@ -322,6 +393,7 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 			// and value is set.
 			v, ok := modulePartValueMap[m.Id]
 			if ok {
+				fmt.Println(v.Value)
 				m.Value = json.RawMessage(v.Value)
 			} else {
 				m.Value = nil

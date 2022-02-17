@@ -147,6 +147,90 @@ func CreatePrefab(state common.State, w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
-func UpdatePrefab(id int, w http.ResponseWriter, r *http.Request) {
+func DeletePrefab(state common.State, w http.ResponseWriter, r *http.Request) error {
+	prefabIdStr := chi.URLParam(r, "prefabId")
+	prefabId, err := strconv.Atoi(prefabIdStr)
+	if err != nil {
+		return err
+	}
 
+	err = data.DeletePrefab(state, prefabId)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func UpdatePrefab(state common.State, w http.ResponseWriter, r *http.Request) error {
+	type prefabUpdateRequest struct {
+		Id        int                          `json:"id"`
+		ParentId  sql.NullInt32                `json:"parentId"`
+		Name      string                       `json:"name"`
+		Transform json.RawMessage              `json:"transform"`
+		Renderer  json.RawMessage              `json:"renderer"`
+		Colliders json.RawMessage              `json:"colliders"`
+		Modules   []data.PrefabModulePartValue `json:"modules"`
+		Children  json.RawMessage              `json:"children"`
+	}
+
+	var req prefabUpdateRequest
+	err := xjson.Decode(r, &req)
+	if err != nil {
+		return err
+	}
+
+	prefabChannel := make(chan prefabUpdateRequest, 500)
+	prefabChannel <- req
+
+	// Start transcation. If all components can not be added successfully, don't
+	// insert anything
+	tx, err := state.Conn.Begin(state.Context)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(state.Context)
+	// Process nodes in json object tree
+	for prefab := range prefabChannel {
+		if prefab.Transform == nil || prefab.Colliders == nil || prefab.Renderer == nil {
+			return xerrors.ErrBadRequest
+		}
+
+		if prefab.Id == 0 {
+			return errors.New("invalid prefab id")
+		}
+
+		err := data.UpdatePrefab(state, prefab.Id, prefab.Name, prefab.ParentId, prefab.Transform, prefab.Renderer, prefab.Colliders)
+		if err != nil {
+			return err
+		}
+		err = data.UpdatePrefabModulePartValues(state, prefab.Id, 1, prefab.Modules)
+		if err != nil {
+			return err
+		}
+
+		// Check if current value is a json object
+		children := make([]prefabUpdateRequest, 0)
+		err = json.Unmarshal(prefab.Children, &children)
+		if err != nil || children == nil || len(children) == 0 {
+			// If there is no more elements to process, close the channel
+			if len(prefabChannel) == 0 {
+				close(prefabChannel)
+			}
+			continue
+		}
+
+		// Add all values to process channel
+		for _, child := range children {
+			child.ParentId = prefab.ParentId
+			prefabChannel <- child
+		}
+	}
+	err = tx.Commit(state.Context)
+	if err != nil {
+		return err
+	}
+
+	response.Success(w, "Successfully updated prefab!")
+	return nil
 }
