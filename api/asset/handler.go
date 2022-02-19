@@ -61,23 +61,19 @@ func SyncAssets(state common.State, w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 
-	resp := make([]AssetDb, len(req.Assets))
 	for _, asset := range req.Assets {
-		id, err := DbSyncAsset(state, req.Type, &asset)
+		_, err := DbSyncAsset(state, req.Type, &asset)
 		if err != nil {
 			return err
 		}
-		resp = append(resp, AssetDb{
-			Id:        id,
-			UnityGuid: asset.Guid,
-			Name:      asset.Name,
-			Type:      req.Type,
-		})
 	}
+
+	assets, err := DbGetAssets(state, AssetType(req.Type))
+
 	if err != nil {
 		return err
 	}
 
-	response.Json(w, resp)
+	response.Json(w, assets)
 	return nil
 }

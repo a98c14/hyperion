@@ -84,7 +84,7 @@ func GenerateAnimationsFromSprites(state common.State, w http.ResponseWriter, r 
 	conn := state.Conn
 	ctx := state.Context
 
-	rows, err := conn.Query(ctx, `select id, unity_name from sprite`)
+	rows, err := conn.Query(ctx, `select sprite.id, asset.name from sprite inner join asset on asset.id=sprite.asset_id`)
 	if err != nil {
 		return err
 	}
@@ -129,5 +129,6 @@ func GenerateAnimationsFromSprites(state common.State, w http.ResponseWriter, r 
 		}
 	}
 
+	response.Success(w, "Generated animations successfully!")
 	return nil
 }

@@ -108,12 +108,14 @@ type RootPrefab struct {
 }
 
 type PrefabModulePart struct {
-	Id        int                 `json:"id"`
-	Name      string              `json:"name"`
-	ParentId  int                 `json:"parentId"`
-	ValueType int                 `json:"valueType"`
-	Value     json.RawMessage     `json:"value"`
-	Children  []*PrefabModulePart `json:"children"`
+	Id         int                 `json:"id"`
+	Name       string              `json:"name"`
+	ParentId   int                 `json:"parentId"`
+	ArrayIndex int                 `json:"arrayIndex"`
+	IsArray    bool                `json:"isArray"`
+	ValueType  int                 `json:"valueType"`
+	Value      json.RawMessage     `json:"value"`
+	Children   []*PrefabModulePart `json:"children"`
 }
 
 type ById []*Prefab
@@ -302,6 +304,10 @@ func GetPrefabById(state common.State, prefabId int, balanceVersionId int) (*Pre
 	}
 }
 
+func getModulePartKey(prefabId int, modulePartId int) string {
+	return fmt.Sprintf("%d_%d", prefabId, modulePartId)
+}
+
 func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB) (*Prefab, error) {
 	parentId := 0
 	if prefab.ParentId.Valid {
@@ -331,7 +337,7 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 	defer rows.Close()
 
 	prefabModuleValues := make([]PrefabModuleValueDB, 0)
-	modulePartValueMap := make(map[int]*PrefabModuleValueDB)
+	prefabModulePartMap := make(map[string][]*PrefabModuleValueDB)
 	for rows.Next() {
 		pvalue := PrefabModuleValueDB{}
 		err = rows.Scan(&pvalue.Id, &pvalue.ArrayIndex, &pvalue.ModulePartId, &pvalue.ValueType, &pvalue.Value, &pvalue.PrefabId)
@@ -340,18 +346,24 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 		}
 
 		prefabModuleValues = append(prefabModuleValues, pvalue)
-		modulePartValueMap[pvalue.ModulePartId] = &pvalue
+		values := prefabModulePartMap[getModulePartKey(pvalue.PrefabId, pvalue.ModulePartId)]
+		values = append(values, &pvalue)
+		prefabModulePartMap[getModulePartKey(pvalue.PrefabId, pvalue.ModulePartId)] = values
+	}
 
+	// If prefab has no modules exit early
+	if len(prefabModuleValues) == 0 {
+		return &result, nil
 	}
 
 	// Load prefab module trees.
 	instr, params := querystr.GenerateInStringIdentifiable(ByIdPValue(prefabModuleValues), 0)
 	rows, err = state.Conn.Query(state.Context, `with recursive module_part_recursive as (
-			select module_part.id, name, value_type, parent_id from module_part 
+			select module_part.id, name, value_type, parent_id, module_part.is_array from module_part 
 			where module_part.id in (`+instr+`)
-			union select mp.id, mp.name, mp.value_type, mp.parent_id from module_part mp 
+			union select mp.id, mp.name, mp.value_type, mp.parent_id, mp.is_array from module_part mp 
 			inner join module_part_recursive mpr on mp.id=mpr.parent_id
-		) select id, name, value_type, parent_id from module_part_recursive;`, params...)
+		) select id, name, value_type, parent_id, is_array from module_part_recursive;`, params...)
 	if err != nil {
 		return nil, xerrors.Wrap("getPrefabDetails", err)
 	}
@@ -363,14 +375,33 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 	var parentIdSql sql.NullInt32
 	for rows.Next() {
 		modulePart := PrefabModulePart{}
-		rows.Scan(&modulePart.Id, &modulePart.Name, &modulePart.ValueType, &parentIdSql)
+		rows.Scan(&modulePart.Id, &modulePart.Name, &modulePart.ValueType, &parentIdSql, &modulePart.IsArray)
 
 		// Store the parentId in map
 		if parentIdSql.Valid {
 			bucket := childMap[int(parentIdSql.Int32)]
-			bucket = append(bucket, &modulePart)
+
+			if prefabModuleParts, ok := prefabModulePartMap[getModulePartKey(prefab.Id, modulePart.Id)]; ok {
+				for _, part := range prefabModuleParts {
+					m := PrefabModulePart{
+						Id:         modulePart.Id,
+						ParentId:   int(parentIdSql.Int32),
+						Name:       modulePart.Name,
+						ValueType:  modulePart.ValueType,
+						ArrayIndex: part.ArrayIndex,
+						IsArray:    modulePart.IsArray,
+						Value:      part.Value,
+					}
+					bucket = append(bucket, &m)
+				}
+			} else {
+				modulePart.ArrayIndex = 0
+				modulePart.Value = nil
+				modulePart.ParentId = int(parentIdSql.Int32)
+				bucket = append(bucket, &modulePart)
+			}
+
 			childMap[int(parentIdSql.Int32)] = bucket
-			modulePart.ParentId = int(parentIdSql.Int32)
 		} else {
 			// Add every root module to process queue for later processing
 			processQueue <- &modulePart
@@ -387,16 +418,6 @@ func getPrefabDetails(state common.State, balanceVersionId int, prefab *PrefabDB
 			for _, child := range children {
 				processQueue <- child
 				m.Children = append(m.Children, child)
-			}
-		} else {
-			// If current module has no child it means it is a leaf/value node
-			// and value is set.
-			v, ok := modulePartValueMap[m.Id]
-			if ok {
-				fmt.Println(v.Value)
-				m.Value = json.RawMessage(v.Value)
-			} else {
-				m.Value = nil
 			}
 		}
 

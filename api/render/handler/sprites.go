@@ -14,21 +14,33 @@ import (
 
 func GetSprites(state common.State, w http.ResponseWriter, r *http.Request) error {
 	rows, err := state.Conn.Query(state.Context,
-		`select id, texture_id, unity_name, unity_pivot, 
-				unity_rect, unity_border, unity_alignment
-		 from sprite`)
+		`select sprite.id, 
+				texture_id, 
+				unity_name, 
+				unity_pivot, 
+				unity_rect, 
+				unity_border, 
+				unity_alignment, 
+				unity_sprite_id,
+				asset.unity_internal_id,
+				asset.unity_guid
+		 from sprite
+		 inner join asset on sprite.asset_id=asset.id `)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	type resp struct {
-		Id        int       `json:"id"`
-		TextureId int       `json:"textureId"`
-		Name      string    `json:"name"`
-		Pivot     data.Vec2 `json:"pivot"`
-		Rect      data.Rect `json:"rect"`
-		Border    data.Vec4 `json:"border"`
-		Alignment int       `json:"alignment"`
+		Id              int       `json:"id"`
+		TextureId       int       `json:"textureId"`
+		Name            string    `json:"name"`
+		Pivot           data.Vec2 `json:"pivot"`
+		Rect            data.Rect `json:"rect"`
+		Border          data.Vec4 `json:"border"`
+		Alignment       int       `json:"alignment"`
+		SpriteId        string    `json:"spriteId"`
+		UnityInternalId int64     `json:"unityInternalId"`
+		UnityGuid       string    `json:"unityGuid"`
 	}
 
 	sprites := make([]*resp, 0, 3000)
@@ -37,7 +49,7 @@ func GetSprites(state common.State, w http.ResponseWriter, r *http.Request) erro
 	var border string
 	for rows.Next() {
 		sprite := resp{}
-		err = rows.Scan(&sprite.Id, &sprite.TextureId, &sprite.Name, &pivot, &rect, &border, &sprite.Alignment)
+		err = rows.Scan(&sprite.Id, &sprite.TextureId, &sprite.Name, &pivot, &rect, &border, &sprite.Alignment, &sprite.SpriteId, &sprite.UnityInternalId, &sprite.UnityGuid)
 		if err != nil {
 			return err
 		}
@@ -56,6 +68,7 @@ func CreateSprites(state common.State, w http.ResponseWriter, r *http.Request) e
 	conn := state.Conn
 
 	// Parse request body
+
 	req := struct {
 		TextureId int
 		Sprites   []data.Sprite
@@ -72,7 +85,7 @@ func CreateSprites(state common.State, w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 
-	// Start transcation. If all components can not be added successfully, don't
+	// Start transaction. If all components can not be added successfully, don't
 	// insert anything
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -82,9 +95,10 @@ func CreateSprites(state common.State, w http.ResponseWriter, r *http.Request) e
 	batch := &pgx.Batch{}
 	for _, sprite := range req.Sprites {
 		asset := asset.AssetDb{
-			UnityGuid: sprite.InternalId,
-			Name:      sprite.Name,
-			Type:      asset.Sprite,
+			UnityGuid:       "0",
+			UnityInternalId: sprite.InternalId,
+			Name:            sprite.Name,
+			Type:            asset.Sprite,
 		}
 		data.InsertSpriteIfNotExists(ctx, batch, req.TextureId, &sprite, &asset)
 	}

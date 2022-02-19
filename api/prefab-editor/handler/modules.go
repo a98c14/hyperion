@@ -34,6 +34,7 @@ func GetModuleById(state common.State, w http.ResponseWriter, r *http.Request) e
 		Name      string        `json:"name"`
 		ValueType int           `json:"valueType"`
 		Children  []*modulePart `json:"children"`
+		IsArray   bool          `json:"isArray"`
 	}
 
 	/* Create object tree from module part list. Components are always ordered from root to child*/
@@ -41,6 +42,7 @@ func GetModuleById(state common.State, w http.ResponseWriter, r *http.Request) e
 		Id:        moduleParts[0].Id,
 		Name:      moduleParts[0].Name,
 		ValueType: moduleParts[0].ValueType,
+		IsArray:   moduleParts[0].IsArray,
 		Children:  make([]*modulePart, 0),
 	}
 	nodeMap := make(map[int]*modulePart)
@@ -51,6 +53,7 @@ func GetModuleById(state common.State, w http.ResponseWriter, r *http.Request) e
 				Id:        c.Id,
 				Name:      c.Name,
 				ValueType: c.ValueType,
+				IsArray:   c.IsArray,
 				Children:  nil,
 			}
 			val.Children = append(val.Children, &cr)

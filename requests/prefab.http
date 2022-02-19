@@ -2,7 +2,11 @@ GET http://localhost:8000/prefabs HTTP/1.1
 
 ###
 
-GET http://localhost:8000/prefabs/20 HTTP/1.1
+GET http://localhost:8000/prefabs/40 HTTP/1.1
+
+###
+
+GET http://localhost:8000/prefabs/38 HTTP/1.1
 
 ###
 

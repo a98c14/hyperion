@@ -34,8 +34,8 @@ func CreateAnimation(state common.State, animation *Animation) error {
 		err := state.Conn.QueryRow(state.Context,
 			`
 			with ins as (
-				insert into asset (name, unity_guid, type)
-				values ($1, '-', $4)
+				insert into asset (name, unity_guid, unity_internal_id, type)
+				values ($1, '0', 0, $4)
 				returning id
 			)
 			insert into "animation"

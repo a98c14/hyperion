@@ -17,8 +17,13 @@ import (
 func HandleCors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		next.ServeHTTP(w, r)
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "PUT, POST, GET, DELETE, OPTIONS, PATCH, HEAD")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			next.ServeHTTP(w, r)
+		}
 	})
 }
 
@@ -85,7 +90,7 @@ func New() *chi.Mux {
 	r.Route("/assets", func(r chi.Router) {
 		r.Method("GET", "/", Handler(asset.GetAssets))
 		r.Method("GET", "/{assetId}", Handler(asset.GetAssetName))
-		r.Method("POST", "/", Handler(asset.SyncAssets))
+		r.Method("POST", "/sync", Handler(asset.SyncAssets))
 	})
 
 	r.Route("/health", func(r chi.Router) {

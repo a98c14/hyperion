@@ -6,8 +6,6 @@ create table sprite (
   asset_id           integer not null,
   texture_id         integer not null,
   unity_sprite_id    varchar(200) not null,
-  unity_internal_id  varchar(200) not null,
-  unity_name         varchar(200) not null,
   unity_pivot        json not null,
   unity_rect         json not null,
   unity_border       json not null,

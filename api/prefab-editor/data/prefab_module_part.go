@@ -2,7 +2,6 @@ package data
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/a98c14/hyperion/common"
 	xerrors "github.com/a98c14/hyperion/common/errors"
@@ -24,7 +23,6 @@ func (b ByIdPMPValue) Len() int     { return len(b) }
 func InsertPrefabModulePartValues(state common.State, prefabId int, versionId int, values []PrefabModulePartValue) error {
 	batch := &pgx.Batch{}
 	for _, v := range values {
-		fmt.Println(v)
 		batch.Queue(`insert into "prefab_module_part"
 				(array_index, value, prefab_id, module_part_id, balance_version_id)
 				values($1, $2, $3, $4, $5)
@@ -43,6 +41,9 @@ func InsertPrefabModulePartValues(state common.State, prefabId int, versionId in
 
 func UpdatePrefabModulePartValues(state common.State, prefabId int, versionId int, values []PrefabModulePartValue) error {
 	batch := &pgx.Batch{}
+	if len(values) == 0 {
+		return nil
+	}
 	for _, v := range values {
 		batch.Queue(`
 				update prefab_module_part
@@ -68,7 +69,6 @@ func UpdatePrefabModulePartValues(state common.State, prefabId int, versionId in
 	br := state.Conn.SendBatch(state.Context, batch)
 	_, err := br.Exec()
 	if err != nil {
-		fmt.Println("ERrror")
 		return err
 	}
 	br.Close()

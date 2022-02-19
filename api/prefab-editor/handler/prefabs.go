@@ -159,6 +159,7 @@ func DeletePrefab(state common.State, w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
+	response.Success(w, "Successfully deleted prefab!")
 	return nil
 }
 

@@ -120,7 +120,7 @@ func CreateTexture(state common.State, w http.ResponseWriter, r *http.Request) e
 	tempFile.Write(fileBytes)
 	path := tempFile.Name()
 
-	id, err := data.InsertTexture(state, path, unityGuid, unityName)
+	id, err := data.InsertTexture(state, path, unityGuid, 0, unityName)
 	if err != nil {
 		fmt.Println(err)
 		return err

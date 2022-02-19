@@ -161,9 +161,9 @@ func GetModulePartMap(state common.State, moduleName string) (map[string]*Module
 
 func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 	rows, err := state.Conn.Query(state.Context, `with recursive module_part_recursive as (
-		select id, name, value_type, parent_id from module_part
+		select id, name, value_type, parent_id, is_array from module_part
 		where id=$1 and parent_id is null and deleted_date is null
-		union select c.id, c.name, c.value_type, c.parent_id from module_part c
+		union select c.id, c.name, c.value_type, c.parent_id, c.is_array from module_part c
 		inner join module_part_recursive cp on cp.id=c.parent_id 
 		where deleted_date is null 
 	) select * from module_part_recursive;`, moduleId)
@@ -178,8 +178,9 @@ func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 	var name string
 	var valueType int
 	var parentId sql.NullInt32
+	var isArray bool
 	for rows.Next() {
-		err = rows.Scan(&id, &name, &valueType, &parentId)
+		err = rows.Scan(&id, &name, &valueType, &parentId, &isArray)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +188,7 @@ func GetModuleParts(state common.State, moduleId int) ([]*ModulePart, error) {
 		if parentId.Valid {
 			pid = int(parentId.Int32)
 		}
-		moduleParts = append(moduleParts, &ModulePart{Id: id, Name: name, ValueType: valueType, ParentId: pid})
+		moduleParts = append(moduleParts, &ModulePart{Id: id, Name: name, ValueType: valueType, ParentId: pid, IsArray: isArray})
 	}
 	moduleCount := rows.CommandTag().RowsAffected()
 	if moduleCount == 0 {
