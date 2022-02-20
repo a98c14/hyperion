@@ -1,8 +1,6 @@
 package asset
 
 import (
-	"database/sql"
-
 	"github.com/a98c14/hyperion/common"
 	e "github.com/a98c14/hyperion/common/errors"
 	"github.com/jackc/pgx/v4"
@@ -74,34 +72,22 @@ func DbGetAssets(state common.State, assetType AssetType) ([]AssetDb, error) {
 }
 
 // Inserts the asset if it doesn't exist. Otherwise updates the name or guid whichever don't match
-// TODO(selim): Use batching
-func DbSyncAsset(state common.State, assetType AssetType, asset *AssetUnity) (int32, error) {
-	var id sql.NullInt32
-	var name string
-	var guid string
-	var internalId int64
-	// CHECK(selim): Is checking the name correct here? It is not guaranteed to be unique.
-	err := state.Conn.QueryRow(state.Context, `select id, name, unity_guid, unity_internal_id from asset where (name=$1 or unity_internal_id=$2) and type=$3`, asset.Name, asset.InternalId, assetType).Scan(&id, &name, &guid, &internalId)
-	if err != nil || !id.Valid {
-		err = state.Conn.QueryRow(state.Context, `insert into asset (name, unity_guid, unity_internal_id, type) values ($1, $2, $3, $4) returning id`, asset.Name, asset.InternalGuid, asset.InternalId, assetType).Scan(&id)
-		if err != nil {
-			return 0, err
-		}
-		return id.Int32, nil
-	}
-	if name != asset.Name {
-		state.Conn.Exec(state.Context, `update asset (name) values ($2) where id=$1`, id, asset.Name)
-	}
-
-	if guid != asset.InternalGuid {
-		state.Conn.Exec(state.Context, `update asset (unity_guid) values ($2) where id=$1`, id, asset.InternalGuid)
-	}
-
-	if internalId != asset.InternalId {
-		state.Conn.Exec(state.Context, `update asset (internalId) values ($2) where id=$1`, id, asset.InternalId)
-	}
-
-	return id.Int32, nil
+func DbSyncAsset(state common.State, batch *pgx.Batch, assetType AssetType, asset *AssetUnity) {
+	batch.Queue(`
+	with new_assets (name, unity_guid, unity_internal_id, type) as 
+			 (values ($1, $2, $3::bigint, $4::int)),
+		 upsert as (
+			 update asset a 
+				 set name=na.name,
+					 unity_guid=na.unity_guid,
+					unity_internal_id=na.unity_internal_id
+			 from new_assets na 
+			 where (a.unity_internal_id=na.unity_internal_id or a.name=na.name) and a.type=na.type
+			 returning a.name, a.unity_guid, a.unity_internal_id, a.type)
+		insert into asset (name, unity_guid, unity_internal_id, type)
+		select name, unity_guid, unity_internal_id, type from new_assets
+		where not exists (select 1 from upsert where upsert.unity_internal_id=new_assets.unity_internal_id and upsert.type=new_assets.type)
+`, asset.Name, asset.InternalGuid, asset.InternalId, assetType)
 }
 
 // Creates given asset in database

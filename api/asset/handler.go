@@ -2,6 +2,7 @@ package asset
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/a98c14/hyperion/common/errors"
 	"github.com/a98c14/hyperion/common/response"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v4"
 )
 
 func GetAssets(state common.State, w http.ResponseWriter, r *http.Request) error {
@@ -27,6 +29,7 @@ func GetAssets(state common.State, w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 
+	fmt.Println(assetTypeString)
 	response.Json(w, &assets)
 	return nil
 }
@@ -60,16 +63,18 @@ func SyncAssets(state common.State, w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return err
 	}
-
+	batch := &pgx.Batch{}
 	for _, asset := range req.Assets {
-		_, err := DbSyncAsset(state, req.Type, &asset)
-		if err != nil {
-			return err
-		}
+		DbSyncAsset(state, batch, req.Type, &asset)
 	}
+	br := state.Conn.SendBatch(state.Context, batch)
+	ct, err := br.Exec()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Inserted rows: %d", ct.RowsAffected())
 
 	assets, err := DbGetAssets(state, AssetType(req.Type))
-
 	if err != nil {
 		return err
 	}

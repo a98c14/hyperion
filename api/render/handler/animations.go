@@ -84,7 +84,7 @@ func GenerateAnimationsFromSprites(state common.State, w http.ResponseWriter, r 
 	conn := state.Conn
 	ctx := state.Context
 
-	rows, err := conn.Query(ctx, `select sprite.id, asset.name from sprite inner join asset on asset.id=sprite.asset_id`)
+	rows, err := conn.Query(ctx, `select sprite.id, asset.name, asset.id from sprite inner join asset on asset.id=sprite.asset_id`)
 	if err != nil {
 		return err
 	}
@@ -92,9 +92,10 @@ func GenerateAnimationsFromSprites(state common.State, w http.ResponseWriter, r 
 
 	animationMap := make(map[string]*data.Animation)
 	var id int
+	var assetId int
 	var unityName string
 	for rows.Next() {
-		err := rows.Scan(&id, &unityName)
+		err := rows.Scan(&id, &unityName, &assetId)
 		if err != nil {
 			return err
 		}
@@ -109,7 +110,7 @@ func GenerateAnimationsFromSprites(state common.State, w http.ResponseWriter, r 
 			animationName = strings.Join(parts[:len(parts)-2], "_")
 		}
 		if val, ok := animationMap[animationName]; ok {
-			val.Sprites = append(val.Sprites, id)
+			val.Sprites = append(val.Sprites, assetId)
 		} else {
 			anim := data.Animation{
 				Name:           animationName,
@@ -117,7 +118,7 @@ func GenerateAnimationsFromSprites(state common.State, w http.ResponseWriter, r 
 				TransitionType: 1,
 				Sprites:        make([]int, 0),
 			}
-			anim.Sprites = append(anim.Sprites, id)
+			anim.Sprites = append(anim.Sprites, assetId)
 			animationMap[animationName] = &anim
 		}
 	}

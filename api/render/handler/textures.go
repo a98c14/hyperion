@@ -15,7 +15,7 @@ import (
 )
 
 func GetTextures(state common.State, w http.ResponseWriter, r *http.Request) error {
-	rows, err := state.Conn.Query(state.Context, "select id, unity_name from texture")
+	rows, err := state.Conn.Query(state.Context, "select texture.id, asset.name from texture inner join asset on asset.id=texture.asset_id")
 	if err != nil {
 		return err
 	}

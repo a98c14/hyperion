@@ -188,8 +188,8 @@ func InsertPrefab(ctx context.Context, conn *pgxpool.Pool, name string, parentId
 	err := conn.QueryRow(ctx,
 		`
 		with ins as (
-			insert into asset (name, unity_guid, type)
-			select $1, '-', $3
+			insert into asset (name, unity_guid, unity_internal_id, type)
+			select $1, '-', -2, $3
 			returning id
 		)
 		insert into "prefab" 

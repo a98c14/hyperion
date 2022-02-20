@@ -14,14 +14,15 @@ import (
 
 func GetSprites(state common.State, w http.ResponseWriter, r *http.Request) error {
 	rows, err := state.Conn.Query(state.Context,
-		`select sprite.id, 
+		`select asset.id, 
 				texture_id, 
-				unity_name, 
+				asset.name, 
 				unity_pivot, 
 				unity_rect, 
 				unity_border, 
 				unity_alignment, 
 				unity_sprite_id,
+				asset.id,
 				asset.unity_internal_id,
 				asset.unity_guid
 		 from sprite
@@ -39,6 +40,7 @@ func GetSprites(state common.State, w http.ResponseWriter, r *http.Request) erro
 		Border          data.Vec4 `json:"border"`
 		Alignment       int       `json:"alignment"`
 		SpriteId        string    `json:"spriteId"`
+		AssetId         int       `json:"assetId"`
 		UnityInternalId int64     `json:"unityInternalId"`
 		UnityGuid       string    `json:"unityGuid"`
 	}
@@ -49,7 +51,7 @@ func GetSprites(state common.State, w http.ResponseWriter, r *http.Request) erro
 	var border string
 	for rows.Next() {
 		sprite := resp{}
-		err = rows.Scan(&sprite.Id, &sprite.TextureId, &sprite.Name, &pivot, &rect, &border, &sprite.Alignment, &sprite.SpriteId, &sprite.UnityInternalId, &sprite.UnityGuid)
+		err = rows.Scan(&sprite.Id, &sprite.TextureId, &sprite.Name, &pivot, &rect, &border, &sprite.Alignment, &sprite.SpriteId, &sprite.AssetId, &sprite.UnityInternalId, &sprite.UnityGuid)
 		if err != nil {
 			return err
 		}
