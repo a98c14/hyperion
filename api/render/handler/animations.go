@@ -18,7 +18,7 @@ func GetAnimations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := state.Conn.Query(state.Context,
-		`select a.id, asset.name, a.priority, a.transition_type from animation a
+		`select a.id, asset.name, a.priority, a.transition_type, asset.id from animation a
 		 inner join asset on asset.id=a.asset_id`)
 
 	if err != nil {
@@ -33,14 +33,16 @@ func GetAnimations(w http.ResponseWriter, r *http.Request) {
 	var name string
 	var priority int
 	var transitionType int
+	var assetId int
 	for rows.Next() {
-		err = rows.Scan(&id, &name, &priority, &transitionType)
+		err = rows.Scan(&id, &name, &priority, &transitionType, &assetId)
 		if err != nil {
 			response.InternalError(w, err)
 			return
 		}
 		animationMap[id] = &data.Animation{
 			Id:             id,
+			AssetId:        assetId,
 			Name:           name,
 			Priority:       priority,
 			TransitionType: transitionType,

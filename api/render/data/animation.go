@@ -11,6 +11,7 @@ import (
 
 type Animation struct {
 	Id             int    `json:"id"`
+	AssetId        int    `json:"assetId"`
 	Name           string `json:"name"`
 	Priority       int    `json:"priority"`
 	TransitionType int    `json:"transitionType"`
